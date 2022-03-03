@@ -16,9 +16,6 @@
 
 namespace arb {
 
-using region_map = std::unordered_map<std::string, mcable_list>;
-using locset_map = std::unordered_map<std::string, mlocation_list>;
-
 using value_type = cable_cell::value_type;
 using index_type = cable_cell::index_type;
 using size_type = cable_cell::size_type;

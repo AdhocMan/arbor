@@ -11,6 +11,7 @@
 #include <arbor/cv_policy.hpp>
 #include <arbor/mechcat.hpp>
 #include <arbor/morph/locset.hpp>
+#include <arbor/morph/primitives.hpp>
 
 namespace arb {
 
@@ -184,6 +185,24 @@ private:
     std::unordered_map<std::string, double> param_;
 };
 
+struct iexpr_interface;
+
+struct iexpr {
+
+    static iexpr identity();
+
+    static iexpr distance(const mlocation& loc);
+
+    const iexpr_interface& get() const {
+        return *impl_;
+    }
+
+private:
+    explicit iexpr(std::shared_ptr<iexpr_interface> impl) : impl_(std::move(impl)) {}
+
+    std::shared_ptr<iexpr_interface> impl_;
+};
+
 // Tagged mechanism types for dispatching decor::place() and decor::paint() calls
 struct junction {
     mechanism_desc mech;
@@ -207,11 +226,17 @@ struct synapse {
 
 struct density {
     mechanism_desc mech;
+    std::unordered_map<std::string, iexpr> scales;
     explicit density(mechanism_desc m): mech(std::move(m)) {}
     density(mechanism_desc m, const std::unordered_map<std::string, double>& params): mech(std::move(m)) {
         for (const auto& [param, value]: params) {
             mech.set(param, value);
         }
+    }
+
+    density& scale(std::string name, iexpr ex) {
+        scales.insert_or_assign(name, std::move(ex));
+        return *this;
     }
 };
 
@@ -219,6 +244,7 @@ struct ion_reversal_potential_method {
     std::string ion;
     mechanism_desc method;
 };
+
 
 using paintable =
     std::variant<init_membrane_potential,

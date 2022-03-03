@@ -1,5 +1,6 @@
 #include <cfloat>
 #include <cmath>
+#include <memory>
 #include <numeric>
 #include <vector>
 #include <variant>
@@ -9,6 +10,7 @@
 #include <arbor/s_expr.hpp>
 
 #include "util/maputil.hpp"
+#include "iexpr_impl.hpp"
 
 namespace arb {
 
@@ -150,6 +152,14 @@ void decor::set_default(defaultable what) {
                 }
             },
             what);
+}
+
+iexpr iexpr::identity() {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::identity()));
+}
+
+iexpr iexpr::distance(const mlocation& loc) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::distance({loc})));
 }
 
 } // namespace arb
