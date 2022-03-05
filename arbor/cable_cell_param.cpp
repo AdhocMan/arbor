@@ -154,12 +154,28 @@ void decor::set_default(defaultable what) {
             what);
 }
 
-iexpr iexpr::identity() {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::identity()));
+iexpr iexpr::scalar(double value) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::scalar(value)));
 }
 
-iexpr iexpr::distance(const mlocation& loc) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::distance({loc})));
+iexpr iexpr::distance(double scale, const mlocation& loc) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::distance(scale, loc)));
+}
+
+iexpr iexpr::radius(double value) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::radius(value)));
+}
+
+iexpr iexpr::diameter(double value) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::radius(2 * value)));
+}
+
+iexpr iexpr::add(const iexpr& left, const iexpr& right) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::add(left.get(), right.get())));
+}
+
+iexpr iexpr::mul(const iexpr& left, const iexpr& right) {
+    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::mul(left.get(), right.get())));
 }
 
 } // namespace arb

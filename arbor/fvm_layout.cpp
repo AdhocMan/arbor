@@ -842,7 +842,7 @@ fvm_mechanism_data fvm_build_mechanism_data(
                 double value = value_by_key(set_params, param_names[i]).value_or(param_dflt[i]);
                 auto scale_it = scales.find(param_names[i]);
                 param_maps[i].insert(cable, {value, scale_it == scales.end()
-                                                        ? iexpr::identity()
+                                                        ? iexpr::scalar(1.0)
                                                         : scale_it->second});
             }
         }
@@ -863,7 +863,7 @@ fvm_mechanism_data fvm_build_mechanism_data(
                       c.branch,
                       pw_over_cable(
                           param_maps[i], c, 0., [&](const mcable &c, const auto& x) {
-                              return x.first * x.second.get().eval(cell.provider(), c);
+                              return x.first * x.second.get()->eval(cell.provider(), c);
                           }));
                 }
             }

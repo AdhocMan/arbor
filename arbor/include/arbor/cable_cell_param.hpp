@@ -189,12 +189,20 @@ struct iexpr_interface;
 
 struct iexpr {
 
-    static iexpr identity();
+    static iexpr scalar(double value);
 
-    static iexpr distance(const mlocation& loc);
+    static iexpr distance(double scale, const mlocation& loc);
 
-    const iexpr_interface& get() const {
-        return *impl_;
+    static iexpr radius(double value);
+
+    static iexpr diameter(double value);
+
+    static iexpr add(const iexpr &left, const iexpr &right);
+
+    static iexpr mul(const iexpr &left, const iexpr &right);
+
+    const std::shared_ptr<iexpr_interface>& get() const {
+        return impl_;
     }
 
 private:
