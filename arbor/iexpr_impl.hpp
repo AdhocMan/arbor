@@ -55,17 +55,19 @@ struct distance : public iexpr_interface {
         msize_t eval_b = eval_loc.branch;
         msize_t loc_b = loc.branch;
         while(eval_b != loc_b) {
-            if(eval_b > loc_b) {
+            if(eval_b > loc_b)
                 eval_b = p.morphology().branch_parent(eval_b);
-            } else {
-                loc_b = p.morphology().branch_parent(eval_b);
-            }
+            else
+                loc_b = p.morphology().branch_parent(loc_b);
         }
-        const msize_t base_b = eval_b == mnpos ? 0 : eval_b;
+
+        // If mnpos, locations are on different sides of root. Take distance to root in this case.
+        // Otherwise, take distance to end of parent branch
+        const auto base_loc = eval_b == mnpos ? mlocation{0, 0.0} : mlocation{eval_b, 1.0};
 
         // compute distance to distal end of parent branch and add together
-        return scale * (std::abs(p.embedding().integrate_length(loc, mlocation{base_b, 1.0})) +
-            std::abs(p.embedding().integrate_length(eval_loc, mlocation{base_b, 1.0})));
+        return scale * (std::abs(p.embedding().integrate_length(loc, base_loc)) +
+               std::abs(p.embedding().integrate_length(eval_loc, base_loc)));
     }
 
     double scale;
