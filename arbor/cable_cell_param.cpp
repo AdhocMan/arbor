@@ -4,6 +4,7 @@
 #include <numeric>
 #include <vector>
 #include <variant>
+#include <tuple>
 
 #include <arbor/cable_cell.hpp>
 #include <arbor/cable_cell_param.hpp>
@@ -155,27 +156,60 @@ void decor::set_default(defaultable what) {
 }
 
 iexpr iexpr::scalar(double value) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::scalar(value)));
+    return iexpr(iexpr_type::scalar, std::make_tuple(value));
 }
 
-iexpr iexpr::distance(double scale, const mlocation& loc) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::distance(scale, loc)));
+iexpr iexpr::distance(double scale, mlocation loc) {
+    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::move(loc)));
 }
 
-iexpr iexpr::radius(double value) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::radius(value)));
+iexpr iexpr::radius(double scale) {
+    return iexpr(iexpr_type::radius, std::make_tuple(scale));
 }
 
-iexpr iexpr::diameter(double value) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::radius(2 * value)));
+iexpr iexpr::diameter(double scale) {
+    return iexpr(iexpr_type::diameter, std::make_tuple(scale));
 }
 
-iexpr iexpr::add(const iexpr& left, const iexpr& right) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::add(left.get(), right.get())));
+iexpr iexpr::add(iexpr left, iexpr right) {
+    return iexpr(iexpr_type::add, std::make_tuple(std::move(left), std::move(right)));
 }
 
-iexpr iexpr::mul(const iexpr& left, const iexpr& right) {
-    return iexpr(std::shared_ptr<iexpr_interface>(new iexpr_impl::mul(left.get(), right.get())));
+iexpr iexpr::mul(iexpr left, iexpr right) {
+    return iexpr(iexpr_type::mul, std::make_tuple(std::move(left), std::move(right)));
+}
+
+std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m) {
+    switch (expr.type_) {
+        case iexpr_type::scalar:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
+                        std::get<0>(std::any_cast<std::tuple<double>>(expr))));
+        case iexpr_type::distance:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::distance(
+                        std::make_from_tuple<iexpr_impl::distance, std::tuple<double, mlocation>>(
+                        std::any_cast<std::tuple<double, mlocation>>(expr))));
+        case iexpr_type::radius:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+                        std::get<0>(std::any_cast<std::tuple<double>>(expr))));
+        case iexpr_type::diameter:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+                        2 * std::get<0>(std::any_cast<std::tuple<double>>(expr))));
+        case iexpr_type::add:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+                        thingify(std::get<0>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m),
+                        thingify(std::get<1>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m)));
+        case iexpr_type::mul:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+                        thingify(std::get<0>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m),
+                        thingify(std::get<1>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m)));
+    }
+    return nullptr;
+}
+
+density::density(scaled_property<density> dens, const mprovider& provider) : density(std::move(dens.prop.mech)) {
+    for(const auto& expr : dens.scale_expr) {
+        scale_expr[expr.first] = thingify(expr.second, provider);
+    }
 }
 
 } // namespace arb

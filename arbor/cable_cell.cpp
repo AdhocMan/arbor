@@ -115,6 +115,10 @@ struct cable_cell_impl {
         return region_map.get<init_reversal_potential>()[init.ion];
     }
 
+    void paint(const region& reg, scaled_property<density> prop) {
+        this->paint<density>(reg, density(std::move(prop), provider));
+    }
+
     template <typename Property>
     void paint(const region& reg, const Property& prop) {
         mextent cables = thingify(reg, provider);

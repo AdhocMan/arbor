@@ -10,14 +10,9 @@
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/primitives.hpp>
 #include <arbor/arbexcept.hpp>
+#include <arbor/cable_cell_param.hpp>
 
 namespace arb {
-struct iexpr_interface {
-
-    virtual double eval(const mprovider &p, const mcable &c) const = 0;
-
-    virtual ~iexpr_interface() = default;
-};
 
 namespace iexpr_impl {
 struct scalar : public iexpr_interface {
@@ -75,27 +70,27 @@ struct distance : public iexpr_interface {
 };
 
 struct add : public iexpr_interface {
-    add(std::shared_ptr<iexpr_interface> l, std::shared_ptr<iexpr_interface> r) :
+    add(std::unique_ptr<iexpr_interface> l, std::unique_ptr<iexpr_interface> r) :
         left(std::move(l)), right(std::move(r)) {}
 
     virtual double eval(const mprovider &p, const mcable &c) const override {
         return left->eval(p, c) + right->eval(p, c);
     }
 
-    std::shared_ptr<iexpr_interface> left;
-    std::shared_ptr<iexpr_interface> right;
+    std::unique_ptr<iexpr_interface> left;
+    std::unique_ptr<iexpr_interface> right;
 };
 
 struct mul : public iexpr_interface {
-    mul(std::shared_ptr<iexpr_interface> l, std::shared_ptr<iexpr_interface> r) :
+    mul(std::unique_ptr<iexpr_interface> l, std::unique_ptr<iexpr_interface> r) :
         left(std::move(l)), right(std::move(r)) {}
 
     virtual double eval(const mprovider &p, const mcable &c) const override {
         return left->eval(p, c) * right->eval(p, c);
     }
 
-    std::shared_ptr<iexpr_interface> left;
-    std::shared_ptr<iexpr_interface> right;
+    std::unique_ptr<iexpr_interface> left;
+    std::unique_ptr<iexpr_interface> right;
 };
 
 } // namespace iexpr_impl
