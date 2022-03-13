@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <variant>
 
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/primitives.hpp>
@@ -36,37 +37,64 @@ struct radius : public iexpr_interface {
     double scale;
 };
 
+template<class> inline constexpr bool always_false_v = false;
+
 struct distance : public iexpr_interface {
-    distance(double s, mlocation l) : scale(s), loc(std::move(l)) {}
+    distance(double s, std::variant<mlocation_list, mextent> l) : scale(s), locations(std::move(l)) {}
 
     virtual double eval(const mprovider &p, const mcable &c) const override {
         auto eval_loc = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
-        if(loc.branch == eval_loc.branch)
-            return scale * std::abs(p.embedding().integrate_length(eval_loc, loc));
+        return std::visit([&](auto&& arg) -> double {
+            using T = std::decay_t<decltype(arg)>;
+
+            double min_dist = std::numeric_limits<double>::max();
+            if constexpr (std::is_same_v<T, mlocation_list>) {
+                for(const auto& loc : arg) {
+                    min_dist = std::min(min_dist, compute_distance(p, eval_loc, loc));
+                }
+            } else if constexpr (std::is_same_v<T, mextent>) {
+                for(const auto& c : arg) {
+                    // distance is 0 if location within extent
+                    if (c.branch == eval_loc.branch && c.prox_pos < eval_loc.pos && c.dist_pos > eval_loc.pos)
+                        return 0.0;
+                    min_dist = std::min(min_dist, compute_distance(p, eval_loc, prox_loc(c)));
+                    min_dist = std::min(min_dist, compute_distance(p, eval_loc, dist_loc(c)));
+                }
+            } else {
+                static_assert(always_false_v<T>, "non-exhaustive visitor!");
+            }
+            return min_dist;
+            }, locations);
+    }
+
+    double compute_distance(const mprovider &p, const mlocation& loc_a, const mlocation& loc_b) const {
+
+        if(loc_a.branch == loc_b.branch)
+            return std::abs(p.embedding().integrate_length(loc_a, loc_b));
 
         // Locations on different branches.
         // Find first common parent branch. Branch id of parent is always smaller.
-        msize_t eval_b = eval_loc.branch;
-        msize_t loc_b = loc.branch;
-        while(eval_b != loc_b) {
-            if(eval_b > loc_b)
-                eval_b = p.morphology().branch_parent(eval_b);
+        msize_t branch_a = loc_a.branch;
+        msize_t branch_b = loc_b.branch;
+        while(branch_a != branch_b) {
+            if(branch_a > branch_b)
+                branch_a = p.morphology().branch_parent(branch_a);
             else
-                loc_b = p.morphology().branch_parent(loc_b);
+                branch_b = p.morphology().branch_parent(branch_b);
         }
 
         // If mnpos, locations are on different sides of root. Take distance to root in this case.
         // Otherwise, take distance to end of parent branch
-        const auto base_loc = eval_b == mnpos ? mlocation{0, 0.0} : mlocation{eval_b, 1.0};
+        const auto base_loc = branch_a == mnpos ? mlocation{0, 0.0} : mlocation{branch_a, 1.0};
 
         // compute distance to distal end of parent branch and add together
-        return scale * (std::abs(p.embedding().integrate_length(loc, base_loc)) +
-               std::abs(p.embedding().integrate_length(eval_loc, base_loc)));
+        return std::abs(p.embedding().integrate_length(loc_a, base_loc)) +
+               std::abs(p.embedding().integrate_length(loc_b, base_loc));
     }
 
     double scale;
-    mlocation loc;
+    std::variant<mlocation_list, mextent> locations;
 };
 
 struct add : public iexpr_interface {

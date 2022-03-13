@@ -206,7 +206,9 @@ struct iexpr {
 
     static iexpr scalar(double value);
 
-    static iexpr distance(double scale, mlocation loc);
+    static iexpr distance(double scale, locset loc);
+
+    static iexpr distance(double scale, region reg);
 
     static iexpr radius(double scale);
 

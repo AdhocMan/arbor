@@ -159,8 +159,12 @@ iexpr iexpr::scalar(double value) {
     return iexpr(iexpr_type::scalar, std::make_tuple(value));
 }
 
-iexpr iexpr::distance(double scale, mlocation loc) {
+iexpr iexpr::distance(double scale, locset loc) {
     return iexpr(iexpr_type::distance, std::make_tuple(scale, std::move(loc)));
+}
+
+iexpr iexpr::distance(double scale, region reg) {
+    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::move(reg)));
 }
 
 iexpr iexpr::radius(double scale) {
@@ -183,25 +187,30 @@ std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m)
     switch (expr.type_) {
         case iexpr_type::scalar:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
-                        std::get<0>(std::any_cast<std::tuple<double>>(expr))));
-        case iexpr_type::distance:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::distance(
-                        std::make_from_tuple<iexpr_impl::distance, std::tuple<double, mlocation>>(
-                        std::any_cast<std::tuple<double, mlocation>>(expr))));
+                        std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args_))));
+        case iexpr_type::distance: {
+                const auto& scale = std::get<0>(std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args_));
+                const auto& var = std::get<1>(std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args_));
+
+                return std::visit([&](auto&& arg) {
+                        return std::unique_ptr<iexpr_interface>(new iexpr_impl::distance(
+                                scale, thingify(arg, m)));
+                    }, var);
+            }
         case iexpr_type::radius:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                        std::get<0>(std::any_cast<std::tuple<double>>(expr))));
+                        std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args_))));
         case iexpr_type::diameter:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                        2 * std::get<0>(std::any_cast<std::tuple<double>>(expr))));
+                        2 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args_))));
         case iexpr_type::add:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
-                        thingify(std::get<0>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m),
-                        thingify(std::get<1>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m)));
+                        thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m),
+                        thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m)));
         case iexpr_type::mul:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
-                        thingify(std::get<0>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m),
-                        thingify(std::get<1>(std::any_cast<std::tuple<iexpr, iexpr>>(expr)), m)));
+                        thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m),
+                        thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m)));
     }
     return nullptr;
 }
