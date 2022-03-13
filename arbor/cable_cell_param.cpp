@@ -160,11 +160,11 @@ iexpr iexpr::scalar(double value) {
 }
 
 iexpr iexpr::distance(double scale, locset loc) {
-    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::move(loc)));
+    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::variant<locset, region>(std::move(loc))));
 }
 
 iexpr iexpr::distance(double scale, region reg) {
-    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::move(reg)));
+    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::variant<locset, region>(std::move(reg))));
 }
 
 iexpr iexpr::radius(double scale) {
