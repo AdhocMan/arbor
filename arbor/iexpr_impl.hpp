@@ -45,7 +45,7 @@ struct distance : public iexpr_interface {
     virtual double eval(const mprovider &p, const mcable &c) const override {
         auto eval_loc = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
-        return std::visit([&](auto&& arg) -> double {
+        return scale * std::visit([&](auto&& arg) -> double {
             using T = std::decay_t<decltype(arg)>;
 
             double min_dist = std::numeric_limits<double>::max();
