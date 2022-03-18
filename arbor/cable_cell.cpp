@@ -1,3 +1,4 @@
+#include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <variant>
@@ -99,8 +100,9 @@ struct cable_cell_impl {
         return region_map.get<T>();
     }
 
-    mcable_map<density>& get_region_map(const density& desc) {
-        return region_map.get<density>()[desc.mech.name()];
+    mcable_map<std::pair<density, iexpr_map>> &
+    get_region_map(const density &desc) {
+      return region_map.get<density>()[desc.mech.name()];
     }
 
     mcable_map<init_int_concentration>& get_region_map(const init_int_concentration& init) {
@@ -115,8 +117,24 @@ struct cable_cell_impl {
         return region_map.get<init_reversal_potential>()[init.ion];
     }
 
-    void paint(const region& reg, scaled_property<density> prop) {
-        this->paint<density>(reg, density(std::move(prop), provider));
+    void paint(const region& reg, const density& prop) {
+        this->paint(reg, prop, {});
+    }
+
+    void paint(const region &reg, const density &prop,
+               const std::unordered_map<std::string, iexpr> &scale_expr) {
+      mextent cables = thingify(reg, provider);
+      auto &mm = get_region_map(prop);
+
+      for (auto c : cables) {
+        // Skip zero-length cables in extent:
+        if (c.prox_pos == c.dist_pos)
+          continue;
+
+        if (!mm.insert(c, {prop, {}})) {
+          throw cable_cell_error(util::pprintf("cable {} overpaints", c));
+        }
+      }
     }
 
     template <typename Property>

@@ -9,6 +9,7 @@
 
 #include <arbor/arbexcept.hpp>
 #include <arbor/cable_cell.hpp>
+#include <arbor/iexpr.hpp>
 #include <arbor/math.hpp>
 #include <arbor/morph/mcable_map.hpp>
 #include <arbor/morph/mprovider.hpp>
@@ -24,7 +25,6 @@
 #include "util/rangeutil.hpp"
 #include "util/transform.hpp"
 #include "util/unique.hpp"
-#include "iexpr_impl.hpp"
 
 namespace arb {
 
@@ -832,12 +832,12 @@ fvm_mechanism_data fvm_build_mechanism_data(
         param_maps.resize(n_param);
 
         for (auto& on_cable: entry.second) {
-            const auto& mech = on_cable.second.mech;
+            const auto& mech = on_cable.second.first.mech;
             verify_mechanism(info, mech);
             mcable cable = on_cable.first;
             const auto& set_params = mech.values();
 
-            const auto& scale_expr = on_cable.second.scale_expr;
+            const auto& scale_expr = on_cable.second.second;
 
             support.insert(cable, 1.);
             for (std::size_t i = 0; i<n_param; ++i) {

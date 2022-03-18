@@ -186,60 +186,6 @@ private:
     std::unordered_map<std::string, double> param_;
 };
 
-struct iexpr_interface {
-
-    virtual double eval(const mprovider &p, const mcable &c) const = 0;
-
-    virtual ~iexpr_interface() = default;
-};
-
-enum class iexpr_type {
-    scalar,
-    distance,
-    radius,
-    diameter,
-    add,
-    mul
-};
-
-struct iexpr {
-
-    static iexpr scalar(double value);
-
-    static iexpr distance(double scale, locset loc);
-
-    static iexpr distance(double scale, region reg);
-
-    static iexpr radius(double scale);
-
-    static iexpr diameter(double scale);
-
-    static iexpr add(iexpr left, iexpr right);
-
-    static iexpr mul(iexpr left, iexpr right);
-
-    iexpr_type type() const { return type_; }
-
-    friend std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m);
-private:
-    iexpr(iexpr_type type, std::any args) : type_(type), args_(std::move(args)) {}
-
-    iexpr_type type_;
-    std::any args_;
-};
-
-template <typename Property>
-struct scaled_property {
-    Property prop;
-    std::unordered_map<std::string, iexpr> scale_expr;
-
-    scaled_property(Property p) : prop(std::move(p)) {}
-
-    scaled_property& scale(std::string name, iexpr expr) {
-        scale_expr.insert_or_assign(name, expr);
-        return *this;
-    }
-};
 
 // Tagged mechanism types for dispatching decor::place() and decor::paint() calls
 struct junction {
@@ -264,15 +210,12 @@ struct synapse {
 
 struct density {
     mechanism_desc mech;
-    std::unordered_map<std::string, std::shared_ptr<iexpr_interface>> scale_expr;
     explicit density(mechanism_desc m): mech(std::move(m)) {}
     density(mechanism_desc m, const std::unordered_map<std::string, double>& params): mech(std::move(m)) {
         for (const auto& [param, value]: params) {
             mech.set(param, value);
         }
     }
-
-    density(scaled_property<density> dens, const mprovider& provider);
 };
 
 
@@ -290,8 +233,7 @@ using paintable =
                  init_int_concentration,
                  init_ext_concentration,
                  init_reversal_potential,
-                 density,
-                 scaled_property<density>>;
+                 density>;
 
 using placeable =
     std::variant<i_clamp,

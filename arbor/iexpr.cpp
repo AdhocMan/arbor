@@ -1,5 +1,3 @@
-#pragma once
-
 // Implementations for inhomogeneous expressions.
 
 #include <algorithm>
@@ -12,10 +10,12 @@
 #include <arbor/morph/primitives.hpp>
 #include <arbor/arbexcept.hpp>
 #include <arbor/cable_cell_param.hpp>
+#include <arbor/iexpr.hpp>
 
 namespace arb {
 
 namespace iexpr_impl {
+namespace {
 struct scalar : public iexpr_interface {
     scalar(double v) : value(v) {}
 
@@ -121,6 +121,41 @@ struct mul : public iexpr_interface {
     std::unique_ptr<iexpr_interface> right;
 };
 
+} // namespace
 } // namespace iexpr_impl
+
+
+std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m) {
+    switch (expr.type()) {
+        case iexpr_type::scalar:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
+                        std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+        case iexpr_type::distance: {
+                const auto& scale = std::get<0>(std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+                const auto& var = std::get<1>(std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+
+                return std::visit([&](auto&& arg) {
+                        return std::unique_ptr<iexpr_interface>(new iexpr_impl::distance(
+                                scale, thingify(arg, m)));
+                    }, var);
+            }
+        case iexpr_type::radius:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+                        std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+        case iexpr_type::diameter:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+                        2 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+        case iexpr_type::add:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+                        thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+                        thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+        case iexpr_type::mul:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+                        thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+                        thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+    }
+    return nullptr;
+}
+
 
 } // namespace arb

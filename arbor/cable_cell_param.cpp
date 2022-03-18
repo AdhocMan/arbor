@@ -8,10 +8,10 @@
 
 #include <arbor/cable_cell.hpp>
 #include <arbor/cable_cell_param.hpp>
+#include <arbor/iexpr.hpp>
 #include <arbor/s_expr.hpp>
 
 #include "util/maputil.hpp"
-#include "iexpr_impl.hpp"
 
 namespace arb {
 
@@ -183,42 +183,5 @@ iexpr iexpr::mul(iexpr left, iexpr right) {
     return iexpr(iexpr_type::mul, std::make_tuple(std::move(left), std::move(right)));
 }
 
-std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m) {
-    switch (expr.type_) {
-        case iexpr_type::scalar:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
-                        std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args_))));
-        case iexpr_type::distance: {
-                const auto& scale = std::get<0>(std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args_));
-                const auto& var = std::get<1>(std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args_));
-
-                return std::visit([&](auto&& arg) {
-                        return std::unique_ptr<iexpr_interface>(new iexpr_impl::distance(
-                                scale, thingify(arg, m)));
-                    }, var);
-            }
-        case iexpr_type::radius:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                        std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args_))));
-        case iexpr_type::diameter:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                        2 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args_))));
-        case iexpr_type::add:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
-                        thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m),
-                        thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m)));
-        case iexpr_type::mul:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
-                        thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m),
-                        thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args_)), m)));
-    }
-    return nullptr;
-}
-
-density::density(scaled_property<density> dens, const mprovider& provider) : density(std::move(dens.prop.mech)) {
-    for(const auto& expr : dens.scale_expr) {
-        scale_expr[expr.first] = thingify(expr.second, provider);
-    }
-}
 
 } // namespace arb
