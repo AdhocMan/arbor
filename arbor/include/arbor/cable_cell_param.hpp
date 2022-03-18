@@ -10,6 +10,7 @@
 
 #include <arbor/arbexcept.hpp>
 #include <arbor/cv_policy.hpp>
+#include <arbor/iexpr.hpp>
 #include <arbor/mechcat.hpp>
 #include <arbor/morph/locset.hpp>
 #include <arbor/morph/primitives.hpp>
@@ -224,6 +225,18 @@ struct ion_reversal_potential_method {
     mechanism_desc method;
 };
 
+template <typename Property>
+struct scaled_property {
+    Property prop;
+    std::unordered_map<std::string, iexpr> scale_expr;
+
+    explicit scaled_property(Property p) : prop(std::move(p)) {}
+
+    scaled_property& scale(std::string name, iexpr expr) {
+        scale_expr.insert_or_assign(name, expr);
+        return *this;
+    }
+};
 
 using paintable =
     std::variant<init_membrane_potential,
@@ -233,7 +246,8 @@ using paintable =
                  init_int_concentration,
                  init_ext_concentration,
                  init_reversal_potential,
-                 density>;
+                 density,
+                 scaled_property<density>>;
 
 using placeable =
     std::variant<i_clamp,

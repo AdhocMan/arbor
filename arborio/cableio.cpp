@@ -85,6 +85,10 @@ s_expr mksexp(const synapse& j) {
 s_expr mksexp(const density& j) {
     return slist("density"_symbol, mksexp(j.mech));
 }
+s_expr mksexp(const scaled_property<density>& j) {
+    //TODO: convert iexpr
+    return slist("density"_symbol, mksexp(j.prop.mech));
+}
 s_expr mksexp(const mpoint& p) {
     return slist("point"_symbol, p.x, p.y, p.z, p.radius);
 }

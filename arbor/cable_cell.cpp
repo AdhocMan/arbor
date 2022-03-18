@@ -118,20 +118,24 @@ struct cable_cell_impl {
     }
 
     void paint(const region& reg, const density& prop) {
-        this->paint(reg, prop, {});
+        this->paint(reg, scaled_property<density>(prop));
     }
 
-    void paint(const region &reg, const density &prop,
-               const std::unordered_map<std::string, iexpr> &scale_expr) {
+    void paint(const region &reg, const scaled_property<density> &prop) {
       mextent cables = thingify(reg, provider);
-      auto &mm = get_region_map(prop);
+      auto &mm = get_region_map(prop.prop);
+
+      std::unordered_map<std::string, std::shared_ptr<iexpr_interface>> im;
+      for(const auto& it : prop.scale_expr) {
+          im.insert_or_assign(it.first, thingify(it.second, provider));
+      }
 
       for (auto c : cables) {
         // Skip zero-length cables in extent:
         if (c.prox_pos == c.dist_pos)
           continue;
 
-        if (!mm.insert(c, {prop, {}})) {
+        if (!mm.insert(c, {prop.prop, im})) {
           throw cable_cell_error(util::pprintf("cable {} overpaints", c));
         }
       }

@@ -125,6 +125,35 @@ struct mul : public iexpr_interface {
 } // namespace iexpr_impl
 
 
+iexpr iexpr::scalar(double value) {
+    return iexpr(iexpr_type::scalar, std::make_tuple(value));
+}
+
+iexpr iexpr::distance(double scale, locset loc) {
+    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::variant<locset, region>(std::move(loc))));
+}
+
+iexpr iexpr::distance(double scale, region reg) {
+    return iexpr(iexpr_type::distance, std::make_tuple(scale, std::variant<locset, region>(std::move(reg))));
+}
+
+iexpr iexpr::radius(double scale) {
+    return iexpr(iexpr_type::radius, std::make_tuple(scale));
+}
+
+iexpr iexpr::diameter(double scale) {
+    return iexpr(iexpr_type::diameter, std::make_tuple(scale));
+}
+
+iexpr iexpr::add(iexpr left, iexpr right) {
+    return iexpr(iexpr_type::add, std::make_tuple(std::move(left), std::move(right)));
+}
+
+iexpr iexpr::mul(iexpr left, iexpr right) {
+    return iexpr(iexpr_type::mul, std::make_tuple(std::move(left), std::move(right)));
+}
+
+
 std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m) {
     switch (expr.type()) {
         case iexpr_type::scalar:
