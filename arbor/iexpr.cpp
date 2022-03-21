@@ -78,7 +78,7 @@ struct distance : public iexpr_interface {
         msize_t branch_a = loc_a.branch;
         msize_t branch_b = loc_b.branch;
         while(branch_a != branch_b) {
-            if(branch_a > branch_b)
+            if(branch_b == mnpos || (branch_a != mnpos && branch_a > branch_b))
                 branch_a = p.morphology().branch_parent(branch_a);
             else
                 branch_b = p.morphology().branch_parent(branch_b);
@@ -173,13 +173,13 @@ std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m)
                         std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
         case iexpr_type::diameter:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                        2 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+                        2.0 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
         case iexpr_type::add:
             return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
                         thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
                         thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
         case iexpr_type::mul:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::mul(
                         thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
                         thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
     }
