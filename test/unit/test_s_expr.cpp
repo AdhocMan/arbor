@@ -501,6 +501,9 @@ std::ostream& operator<<(std::ostream& o, const synapse& p) {
 std::ostream& operator<<(std::ostream& o, const density& p) {
     return o << "(density " << p.mech << ')';
 }
+std::ostream& operator<<(std::ostream& o, const scaled_property<density>& p) {
+    return o << "(scaled_property<density> " << p.prop.mech << ')'; // TODO: print iexpr
+}
 std::ostream& operator<<(std::ostream& o, const ion_reversal_potential_method& p) {
     return o << "(ion-reversal-potential-method \"" << p.ion << "\" " << p.method << ')';
 }
