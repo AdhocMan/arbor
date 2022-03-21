@@ -13,6 +13,8 @@ namespace arb {
 enum class iexpr_type {
     scalar,
     distance,
+    proximal_distance,
+    distal_distance,
     radius,
     diameter,
     add,
@@ -26,6 +28,14 @@ struct iexpr {
     static iexpr distance(double scale, locset loc);
 
     static iexpr distance(double scale, region reg);
+
+    static iexpr proximal_distance(double scale, locset loc);
+
+    static iexpr proximal_distance(double scale, region reg);
+
+    static iexpr distal_distance(double scale, locset loc);
+
+    static iexpr distal_distance(double scale, region reg);
 
     static iexpr radius(double scale);
 
