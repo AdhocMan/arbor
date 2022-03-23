@@ -18,10 +18,20 @@ enum class iexpr_type {
     radius,
     diameter,
     add,
-    mul
+    sub,
+    mul,
+    div,
+    exp,
+    log
 };
 
 struct iexpr {
+    // Convert to scalar expr type
+    iexpr(double value);
+
+    iexpr_type type() const { return type_; }
+
+    const std::any& args() const { return args_; }
 
     static iexpr scalar(double value);
 
@@ -43,11 +53,15 @@ struct iexpr {
 
     static iexpr add(iexpr left, iexpr right);
 
+    static iexpr sub(iexpr left, iexpr right);
+
     static iexpr mul(iexpr left, iexpr right);
 
-    iexpr_type type() const { return type_; }
+    static iexpr div(iexpr left, iexpr right);
 
-    const std::any& args() const { return args_; }
+    static iexpr exp(iexpr value);
+
+    static iexpr log(iexpr value);
 
 private:
     iexpr(iexpr_type type, std::any args) : type_(type), args_(std::move(args)) {}
@@ -55,6 +69,30 @@ private:
     iexpr_type type_;
     std::any args_;
 };
+
+inline iexpr operator+(iexpr a, iexpr b) {
+    return iexpr::add(std::move(a), std::move(b));
+}
+
+inline iexpr operator-(iexpr a, iexpr b) {
+    return iexpr::sub(std::move(a), std::move(b));
+}
+
+inline iexpr operator*(iexpr a, iexpr b) {
+    return iexpr::mul(std::move(a), std::move(b));
+}
+
+inline iexpr operator/(iexpr a, iexpr b) {
+    return iexpr::div(std::move(a), std::move(b));
+}
+
+inline iexpr operator+(iexpr a) {
+    return a;
+}
+
+inline iexpr operator-(iexpr a) {
+    return iexpr::mul(-1.0, std::move(a));
+}
 
 struct iexpr_interface {
 

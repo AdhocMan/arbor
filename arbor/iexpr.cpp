@@ -34,16 +34,24 @@ msize_t common_parent_branch(msize_t branch_a, msize_t branch_b, const morpholog
     return branch_a;
 }
 
-std::optional<double> compute_proximal_distance(const mlocation& loc,
-    const mlocation& loc_origin,
+// Compute the distance in proximal direction. Will return nullopt if loc_prox is not between origin
+// and loc_dist
+std::optional<double> compute_proximal_distance(const mlocation& loc_prox,
+    const mlocation& loc_dist,
     const mprovider& p) {
-    const auto base_branch = common_parent_branch(loc_origin.branch, loc.branch, p.morphology());
-    if (base_branch != mnpos &&
-        ((loc.branch <= base_branch && loc_origin.branch > base_branch) ||
-            (loc_origin.branch == loc.branch && loc_origin.pos > loc.pos))) {
-        return p.embedding().integrate_length(loc, loc_origin);
+
+    // check order if on same branch
+    if (loc_prox.branch == loc_dist.branch && loc_prox.pos > loc_dist.pos) return std::nullopt;
+
+    // check if loc_prox branch is in proximal direction from loc_dist
+    auto b = loc_dist.branch;
+    while (b > loc_prox.branch) {
+        b = p.morphology().branch_parent(b);
+        if (b == mnpos) return std::nullopt;
     }
-    return std::nullopt;
+    if (b != loc_prox.branch) return std::nullopt;
+
+    return p.embedding().integrate_length(loc_prox, loc_dist);
 };
 
 struct scalar: public iexpr_interface {
@@ -58,8 +66,8 @@ struct radius: public iexpr_interface {
     radius(double s): scale(s) {}
 
     double eval(const mprovider& p, const mcable& c) const override {
-        auto eval_loc = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
-        return scale * p.embedding().radius(eval_loc);
+        auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
+        return scale * p.embedding().radius(loc_eval);
     }
 
     double scale;
@@ -71,7 +79,7 @@ struct distance: public iexpr_interface {
         locations(std::move(l)) {}
 
     double eval(const mprovider& p, const mcable& c) const override {
-        auto eval_loc = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
+        auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
         auto compute_distance =
             [](const mprovider& p, const mlocation& loc_a, const mlocation& loc_b) {
@@ -98,7 +106,7 @@ struct distance: public iexpr_interface {
                        [&](const mlocation_list& arg) {
                            double min_dist = std::numeric_limits<double>::max();
                            for (const auto& loc: arg) {
-                               min_dist = std::min(min_dist, compute_distance(p, eval_loc, loc));
+                               min_dist = std::min(min_dist, compute_distance(p, loc_eval, loc));
                            }
                            return min_dist;
                        },
@@ -106,13 +114,13 @@ struct distance: public iexpr_interface {
                            double min_dist = std::numeric_limits<double>::max();
                            for (const auto& c: arg) {
                                // distance is 0 if location within extent
-                               if (c.branch == eval_loc.branch && c.prox_pos < eval_loc.pos &&
-                                   c.dist_pos > eval_loc.pos)
+                               if (c.branch == loc_eval.branch && c.prox_pos < loc_eval.pos &&
+                                   c.dist_pos > loc_eval.pos)
                                    return 0.0;
                                min_dist =
-                                   std::min(min_dist, compute_distance(p, eval_loc, prox_loc(c)));
+                                   std::min(min_dist, compute_distance(p, loc_eval, prox_loc(c)));
                                min_dist =
-                                   std::min(min_dist, compute_distance(p, eval_loc, dist_loc(c)));
+                                   std::min(min_dist, compute_distance(p, loc_eval, dist_loc(c)));
                            }
                            return min_dist;
                        }),
@@ -129,14 +137,14 @@ struct proximal_distance: public iexpr_interface {
         locations(std::move(l)) {}
 
     double eval(const mprovider& p, const mcable& c) const override {
-        auto eval_loc = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
+        auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
         return scale *
                std::visit(arb::util::overload(
                               [&](const mlocation_list& arg) {
                                   std::optional<double> min_dist;
                                   for (const auto& loc: arg) {
-                                      auto dist = compute_proximal_distance(eval_loc, loc, p);
+                                      auto dist = compute_proximal_distance(loc_eval, loc, p);
                                       if (dist)
                                           min_dist = std::min(
                                               min_dist.value_or(std::numeric_limits<double>::max()),
@@ -147,11 +155,11 @@ struct proximal_distance: public iexpr_interface {
                               [&](const mextent& arg) {
                                   std::optional<double> min_dist;
                                   for (const auto& c: arg) {
-                                      if (c.branch == eval_loc.branch &&
-                                          c.prox_pos < eval_loc.pos && c.dist_pos > eval_loc.pos)
+                                      if (c.branch == loc_eval.branch &&
+                                          c.prox_pos < loc_eval.pos && c.dist_pos > loc_eval.pos)
                                           return 0.0;
                                       const mlocation loc{c.branch, c.dist_pos};
-                                      auto dist = compute_proximal_distance(eval_loc, loc, p);
+                                      auto dist = compute_proximal_distance(loc_eval, loc, p);
                                       if (dist)
                                           min_dist = std::min(
                                               min_dist.value_or(std::numeric_limits<double>::max()),
@@ -172,14 +180,14 @@ struct distal_distance: public iexpr_interface {
         locations(std::move(l)) {}
 
     double eval(const mprovider& p, const mcable& c) const override {
-        auto eval_loc = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
+        auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
         return scale *
                std::visit(arb::util::overload(
                               [&](const mlocation_list& arg) {
                                   std::optional<double> min_dist;
                                   for (const auto& loc: arg) {
-                                      auto dist = compute_proximal_distance(loc, eval_loc, p);
+                                      auto dist = compute_proximal_distance(loc, loc_eval, p);
                                       if (dist)
                                           min_dist = std::min(
                                               min_dist.value_or(std::numeric_limits<double>::max()),
@@ -190,11 +198,11 @@ struct distal_distance: public iexpr_interface {
                               [&](const mextent& arg) {
                                   std::optional<double> min_dist;
                                   for (const auto& c: arg) {
-                                      if (c.branch == eval_loc.branch &&
-                                          c.prox_pos < eval_loc.pos && c.dist_pos > eval_loc.pos)
+                                      if (c.branch == loc_eval.branch &&
+                                          c.prox_pos < loc_eval.pos && c.dist_pos > loc_eval.pos)
                                           return 0.0;
-                                      const mlocation loc{c.branch, c.dist_pos};
-                                      auto dist = compute_proximal_distance(loc, eval_loc, p);
+                                      const mlocation loc{c.branch, c.prox_pos};
+                                      auto dist = compute_proximal_distance(loc, loc_eval, p);
                                       if (dist)
                                           min_dist = std::min(
                                               min_dist.value_or(std::numeric_limits<double>::max()),
@@ -222,6 +230,19 @@ struct add: public iexpr_interface {
     std::unique_ptr<iexpr_interface> right;
 };
 
+struct sub: public iexpr_interface {
+    sub(std::unique_ptr<iexpr_interface> l, std::unique_ptr<iexpr_interface> r):
+        left(std::move(l)),
+        right(std::move(r)) {}
+
+    double eval(const mprovider& p, const mcable& c) const override {
+        return left->eval(p, c) - right->eval(p, c);
+    }
+
+    std::unique_ptr<iexpr_interface> left;
+    std::unique_ptr<iexpr_interface> right;
+};
+
 struct mul: public iexpr_interface {
     mul(std::unique_ptr<iexpr_interface> l, std::unique_ptr<iexpr_interface> r):
         left(std::move(l)),
@@ -235,8 +256,43 @@ struct mul: public iexpr_interface {
     std::unique_ptr<iexpr_interface> right;
 };
 
+struct div: public iexpr_interface {
+    div(std::unique_ptr<iexpr_interface> l, std::unique_ptr<iexpr_interface> r):
+        left(std::move(l)),
+        right(std::move(r)) {}
+
+    double eval(const mprovider& p, const mcable& c) const override {
+        return left->eval(p, c) / right->eval(p, c);
+    }
+
+    std::unique_ptr<iexpr_interface> left;
+    std::unique_ptr<iexpr_interface> right;
+};
+
+struct exp: public iexpr_interface {
+    exp(std::unique_ptr<iexpr_interface> v): value(std::move(v)) {}
+
+    double eval(const mprovider& p, const mcable& c) const override {
+        return std::exp(value->eval(p, c));
+    }
+
+    std::unique_ptr<iexpr_interface> value;
+};
+
+struct log: public iexpr_interface {
+    log(std::unique_ptr<iexpr_interface> v): value(std::move(v)) {}
+
+    double eval(const mprovider& p, const mcable& c) const override {
+        return std::log(value->eval(p, c));
+    }
+
+    std::unique_ptr<iexpr_interface> value;
+};
+
 }  // namespace
 }  // namespace iexpr_impl
+
+iexpr::iexpr(double value) { *this = iexpr::scalar(value); }
 
 iexpr iexpr::scalar(double value) { return iexpr(iexpr_type::scalar, std::make_tuple(value)); }
 
@@ -278,68 +334,94 @@ iexpr iexpr::add(iexpr left, iexpr right) {
     return iexpr(iexpr_type::add, std::make_tuple(std::move(left), std::move(right)));
 }
 
+iexpr iexpr::sub(iexpr left, iexpr right) {
+    return iexpr(iexpr_type::sub, std::make_tuple(std::move(left), std::move(right)));
+}
+
 iexpr iexpr::mul(iexpr left, iexpr right) {
     return iexpr(iexpr_type::mul, std::make_tuple(std::move(left), std::move(right)));
 }
 
+iexpr iexpr::div(iexpr left, iexpr right) {
+    return iexpr(iexpr_type::div, std::make_tuple(std::move(left), std::move(right)));
+}
+
+iexpr iexpr::exp(iexpr value) { return iexpr(iexpr_type::exp, std::make_tuple(std::move(value))); }
+
+iexpr iexpr::log(iexpr value) { return iexpr(iexpr_type::log, std::make_tuple(std::move(value))); }
+
 std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m) {
     switch (expr.type()) {
-    case iexpr_type::scalar:
-        return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
-            std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
-    case iexpr_type::distance: {
-        const auto& scale = std::get<0>(
-            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
-        const auto& var = std::get<1>(
-            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+        case iexpr_type::scalar:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
+                std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+        case iexpr_type::distance: {
+            const auto& scale = std::get<0>(
+                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+            const auto& var = std::get<1>(
+                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
 
-        return std::visit(
-            [&](auto&& arg) {
-                return std::unique_ptr<iexpr_interface>(
-                    new iexpr_impl::distance(scale, thingify(arg, m)));
-            },
-            var);
-    }
-    case iexpr_type::proximal_distance: {
-        const auto& scale = std::get<0>(
-            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
-        const auto& var = std::get<1>(
-            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+            return std::visit(
+                [&](auto&& arg) {
+                    return std::unique_ptr<iexpr_interface>(
+                        new iexpr_impl::distance(scale, thingify(arg, m)));
+                },
+                var);
+        }
+        case iexpr_type::proximal_distance: {
+            const auto& scale = std::get<0>(
+                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+            const auto& var = std::get<1>(
+                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
 
-        return std::visit(
-            [&](auto&& arg) {
-                return std::unique_ptr<iexpr_interface>(
-                    new iexpr_impl::proximal_distance(scale, thingify(arg, m)));
-            },
-            var);
-    }
-    case iexpr_type::distal_distance: {
-        const auto& scale = std::get<0>(
-            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
-        const auto& var = std::get<1>(
-            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+            return std::visit(
+                [&](auto&& arg) {
+                    return std::unique_ptr<iexpr_interface>(
+                        new iexpr_impl::proximal_distance(scale, thingify(arg, m)));
+                },
+                var);
+        }
+        case iexpr_type::distal_distance: {
+            const auto& scale = std::get<0>(
+                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+            const auto& var = std::get<1>(
+                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
 
-        return std::visit(
-            [&](auto&& arg) {
-                return std::unique_ptr<iexpr_interface>(
-                    new iexpr_impl::distal_distance(scale, thingify(arg, m)));
-            },
-            var);
-    }
-    case iexpr_type::radius:
-        return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-            std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
-    case iexpr_type::diameter:
-        return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-            2.0 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
-    case iexpr_type::add:
-        return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
-            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
-            thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
-    case iexpr_type::mul:
-        return std::unique_ptr<iexpr_interface>(new iexpr_impl::mul(
-            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
-            thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+            return std::visit(
+                [&](auto&& arg) {
+                    return std::unique_ptr<iexpr_interface>(
+                        new iexpr_impl::distal_distance(scale, thingify(arg, m)));
+                },
+                var);
+        }
+        case iexpr_type::radius:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+                std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+        case iexpr_type::diameter:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+                2.0 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+        case iexpr_type::add:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+        case iexpr_type::sub:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::sub(
+                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+        case iexpr_type::mul:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::mul(
+                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+        case iexpr_type::div:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::div(
+                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+        case iexpr_type::exp:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::exp(
+                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr>&>(expr.args())), m)));
+        case iexpr_type::log:
+            return std::unique_ptr<iexpr_interface>(new iexpr_impl::log(
+                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr>&>(expr.args())), m)));
     }
 
     throw std::runtime_error("thingify iexpr: Unknown iexpr type");
