@@ -34,6 +34,22 @@ msize_t common_parent_branch(msize_t branch_a, msize_t branch_b, const morpholog
     return branch_a;
 }
 
+// compute the distance between any two points on the same morphology
+double compute_distance(const mlocation& loc_a, const mlocation& loc_b, const mprovider& p) {
+    if (loc_a.branch == loc_b.branch) return std::abs(p.embedding().integrate_length(loc_a, loc_b));
+
+    // If mnpos, locations are on different sides of root. Take
+    // distance to root in this case. Otherwise, take distance to
+    // end of parent branch
+    const auto base_branch = common_parent_branch(loc_a.branch, loc_b.branch, p.morphology());
+    const auto base_loc = base_branch == mnpos ? mlocation{0, 0.0} : mlocation{base_branch, 1.0};
+
+    // compute distance to distal end of parent branch and add
+    // together
+    return std::abs(p.embedding().integrate_length(loc_a, base_loc)) +
+           std::abs(p.embedding().integrate_length(loc_b, base_loc));
+};
+
 // Compute the distance in proximal direction. Will return nullopt if loc_prox is not between origin
 // and loc_dist
 std::optional<double> compute_proximal_distance(const mlocation& loc_prox,
@@ -53,6 +69,60 @@ std::optional<double> compute_proximal_distance(const mlocation& loc_prox,
 
     return p.embedding().integrate_length(loc_prox, loc_dist);
 };
+
+enum class direction { any, proximal, distal };
+
+// compute the minimum distance in the given direction from the given locations towards loc_eval.
+// Returs nullopt if loc_eval cannot be found in the direction.
+template <direction Dir>
+std::optional<double> distance_from_locations(
+    const std::variant<mlocation_list, mextent>& locations,
+    const mlocation& loc_eval,
+    const mprovider& p) {
+    return std::visit(
+        arb::util::overload(
+            [&](const mlocation_list& arg) -> std::optional<double> {
+                std::optional<double> min_dist, dist;
+                for (const auto& loc: arg) {
+                    if constexpr (Dir == direction::proximal) {
+                        dist = compute_proximal_distance(loc_eval, loc, p);
+                    }
+                    else if constexpr (Dir == direction::distal) {
+                        dist = compute_proximal_distance(loc, loc_eval, p);
+                    }
+                    else {
+                        dist = compute_distance(loc, loc_eval, p);
+                    }
+                    if (dist)
+                        min_dist = std::min(
+                            min_dist.value_or(std::numeric_limits<double>::max()), dist.value());
+                }
+                return min_dist;
+            },
+            [&](const mextent& arg) -> std::optional<double> {
+                std::optional<double> min_dist, dist;
+                for (const auto& c: arg) {
+                    if (c.branch == loc_eval.branch && c.prox_pos < loc_eval.pos &&
+                        c.dist_pos > loc_eval.pos)
+                        return std::nullopt;
+                    if constexpr (Dir == direction::proximal) {
+                        dist = compute_proximal_distance(loc_eval, {c.branch, c.prox_pos}, p);
+                    }
+                    else if constexpr (Dir == direction::distal) {
+                        dist = compute_proximal_distance({c.branch, c.dist_pos}, loc_eval, p);
+                    }
+                    else {
+                        dist = std::min(compute_distance({c.branch, c.dist_pos}, loc_eval, p),
+                            compute_distance({c.branch, c.prox_pos}, loc_eval, p));
+                    }
+                    if (dist)
+                        min_dist = std::min(
+                            min_dist.value_or(std::numeric_limits<double>::max()), dist.value());
+                }
+                return min_dist;
+            }),
+        locations);
+}
 
 struct scalar: public iexpr_interface {
     scalar(double v): value(v) {}
@@ -81,50 +151,8 @@ struct distance: public iexpr_interface {
     double eval(const mprovider& p, const mcable& c) const override {
         auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
-        auto compute_distance =
-            [](const mprovider& p, const mlocation& loc_a, const mlocation& loc_b) {
-                if (loc_a.branch == loc_b.branch)
-                    return std::abs(p.embedding().integrate_length(loc_a, loc_b));
-
-                // If mnpos, locations are on different sides of root. Take
-                // distance to root in this case. Otherwise, take distance to
-                // end of parent branch
-                const auto base_branch =
-                    common_parent_branch(loc_a.branch, loc_b.branch, p.morphology());
-                const auto base_loc =
-                    base_branch == mnpos ? mlocation{0, 0.0} : mlocation{base_branch, 1.0};
-
-                // compute distance to distal end of parent branch and add
-                // together
-                return std::abs(p.embedding().integrate_length(loc_a, base_loc)) +
-                       std::abs(p.embedding().integrate_length(loc_b, base_loc));
-            };
-
         return scale *
-               std::visit(
-                   arb::util::overload(
-                       [&](const mlocation_list& arg) {
-                           double min_dist = std::numeric_limits<double>::max();
-                           for (const auto& loc: arg) {
-                               min_dist = std::min(min_dist, compute_distance(p, loc_eval, loc));
-                           }
-                           return min_dist;
-                       },
-                       [&](const mextent& arg) {
-                           double min_dist = std::numeric_limits<double>::max();
-                           for (const auto& c: arg) {
-                               // distance is 0 if location within extent
-                               if (c.branch == loc_eval.branch && c.prox_pos < loc_eval.pos &&
-                                   c.dist_pos > loc_eval.pos)
-                                   return 0.0;
-                               min_dist =
-                                   std::min(min_dist, compute_distance(p, loc_eval, prox_loc(c)));
-                               min_dist =
-                                   std::min(min_dist, compute_distance(p, loc_eval, dist_loc(c)));
-                           }
-                           return min_dist;
-                       }),
-                   locations);
+               distance_from_locations<direction::any>(locations, loc_eval, p).value_or(0.0);
     }
 
     double scale;
@@ -140,34 +168,7 @@ struct proximal_distance: public iexpr_interface {
         auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
         return scale *
-               std::visit(arb::util::overload(
-                              [&](const mlocation_list& arg) {
-                                  std::optional<double> min_dist;
-                                  for (const auto& loc: arg) {
-                                      auto dist = compute_proximal_distance(loc_eval, loc, p);
-                                      if (dist)
-                                          min_dist = std::min(
-                                              min_dist.value_or(std::numeric_limits<double>::max()),
-                                              dist.value());
-                                  }
-                                  return min_dist.value_or(0.0);
-                              },
-                              [&](const mextent& arg) {
-                                  std::optional<double> min_dist;
-                                  for (const auto& c: arg) {
-                                      if (c.branch == loc_eval.branch &&
-                                          c.prox_pos < loc_eval.pos && c.dist_pos > loc_eval.pos)
-                                          return 0.0;
-                                      const mlocation loc{c.branch, c.dist_pos};
-                                      auto dist = compute_proximal_distance(loc_eval, loc, p);
-                                      if (dist)
-                                          min_dist = std::min(
-                                              min_dist.value_or(std::numeric_limits<double>::max()),
-                                              dist.value());
-                                  }
-                                  return min_dist.value_or(0.0);
-                              }),
-                   locations);
+               distance_from_locations<direction::proximal>(locations, loc_eval, p).value_or(0.0);
     }
 
     double scale;
@@ -183,38 +184,40 @@ struct distal_distance: public iexpr_interface {
         auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
 
         return scale *
-               std::visit(arb::util::overload(
-                              [&](const mlocation_list& arg) {
-                                  std::optional<double> min_dist;
-                                  for (const auto& loc: arg) {
-                                      auto dist = compute_proximal_distance(loc, loc_eval, p);
-                                      if (dist)
-                                          min_dist = std::min(
-                                              min_dist.value_or(std::numeric_limits<double>::max()),
-                                              dist.value());
-                                  }
-                                  return min_dist.value_or(0.0);
-                              },
-                              [&](const mextent& arg) {
-                                  std::optional<double> min_dist;
-                                  for (const auto& c: arg) {
-                                      if (c.branch == loc_eval.branch &&
-                                          c.prox_pos < loc_eval.pos && c.dist_pos > loc_eval.pos)
-                                          return 0.0;
-                                      const mlocation loc{c.branch, c.prox_pos};
-                                      auto dist = compute_proximal_distance(loc, loc_eval, p);
-                                      if (dist)
-                                          min_dist = std::min(
-                                              min_dist.value_or(std::numeric_limits<double>::max()),
-                                              dist.value());
-                                  }
-                                  return min_dist.value_or(0.0);
-                              }),
-                   locations);
+               distance_from_locations<direction::distal>(locations, loc_eval, p).value_or(0.0);
     }
 
     double scale;
     std::variant<mlocation_list, mextent> locations;
+};
+
+struct interpolation: public iexpr_interface {
+    interpolation(double prox_value,
+        std::variant<mlocation_list, mextent> prox_list,
+        double dist_value,
+        std::variant<mlocation_list, mextent> dist_list):
+        prox_v(prox_value),
+        dist_v(dist_value),
+        prox_l(std::move(prox_list)),
+        dist_l(std::move(dist_list)) {}
+
+    double eval(const mprovider& p, const mcable& c) const override {
+        auto loc_eval = mlocation{c.branch, (c.dist_pos + c.prox_pos) / 2};
+
+        const auto d1 = distance_from_locations<direction::distal>(prox_l, loc_eval, p);
+        if (!d1) return 0.0;
+
+        const auto d2 = distance_from_locations<direction::proximal>(dist_l, loc_eval, p);
+        if (!d2) return 0.0;
+
+        const auto sum = d1.value() + d2.value();
+        if (!sum) return (prox_v + dist_v) * 0.5;
+
+        return prox_v * (d2.value() / sum) + dist_v * (d1.value() / sum);
+    }
+
+    double prox_v, dist_v;
+    std::variant<mlocation_list, mextent> prox_l, dist_l;
 };
 
 struct add: public iexpr_interface {
@@ -326,6 +329,28 @@ iexpr iexpr::distal_distance(double scale, region reg) {
         std::make_tuple(scale, std::variant<locset, region>(std::move(reg))));
 }
 
+iexpr iexpr::interpolation(double prox_value,
+    locset prox_list,
+    double dist_value,
+    locset dist_list) {
+    return iexpr(iexpr_type::interpolation,
+        std::make_tuple(prox_value,
+            std::variant<locset, region>(std::move(prox_list)),
+            dist_value,
+            std::variant<locset, region>(std::move(dist_list))));
+}
+
+iexpr iexpr::interpolation(double prox_value,
+    region prox_list,
+    double dist_value,
+    region dist_list) {
+    return iexpr(iexpr_type::interpolation,
+        std::make_tuple(prox_value,
+            std::variant<locset, region>(std::move(prox_list)),
+            dist_value,
+            std::variant<locset, region>(std::move(dist_list))));
+}
+
 iexpr iexpr::radius(double scale) { return iexpr(iexpr_type::radius, std::make_tuple(scale)); }
 
 iexpr iexpr::diameter(double scale) { return iexpr(iexpr_type::diameter, std::make_tuple(scale)); }
@@ -352,76 +377,90 @@ iexpr iexpr::log(iexpr value) { return iexpr(iexpr_type::log, std::make_tuple(st
 
 std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m) {
     switch (expr.type()) {
-        case iexpr_type::scalar:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
-                std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
-        case iexpr_type::distance: {
-            const auto& scale = std::get<0>(
-                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
-            const auto& var = std::get<1>(
-                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+    case iexpr_type::scalar:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::scalar(
+            std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+    case iexpr_type::distance: {
+        const auto& scale = std::get<0>(
+            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+        const auto& var = std::get<1>(
+            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
 
-            return std::visit(
-                [&](auto&& arg) {
-                    return std::unique_ptr<iexpr_interface>(
-                        new iexpr_impl::distance(scale, thingify(arg, m)));
-                },
-                var);
-        }
-        case iexpr_type::proximal_distance: {
-            const auto& scale = std::get<0>(
-                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
-            const auto& var = std::get<1>(
-                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+        return std::visit(
+            [&](auto&& arg) {
+                return std::unique_ptr<iexpr_interface>(
+                    new iexpr_impl::distance(scale, thingify(arg, m)));
+            },
+            var);
+    }
+    case iexpr_type::proximal_distance: {
+        const auto& scale = std::get<0>(
+            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+        const auto& var = std::get<1>(
+            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
 
-            return std::visit(
-                [&](auto&& arg) {
-                    return std::unique_ptr<iexpr_interface>(
-                        new iexpr_impl::proximal_distance(scale, thingify(arg, m)));
-                },
-                var);
-        }
-        case iexpr_type::distal_distance: {
-            const auto& scale = std::get<0>(
-                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
-            const auto& var = std::get<1>(
-                std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+        return std::visit(
+            [&](auto&& arg) {
+                return std::unique_ptr<iexpr_interface>(
+                    new iexpr_impl::proximal_distance(scale, thingify(arg, m)));
+            },
+            var);
+    }
+    case iexpr_type::distal_distance: {
+        const auto& scale = std::get<0>(
+            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
+        const auto& var = std::get<1>(
+            std::any_cast<const std::tuple<double, std::variant<locset, region>>&>(expr.args()));
 
-            return std::visit(
-                [&](auto&& arg) {
-                    return std::unique_ptr<iexpr_interface>(
-                        new iexpr_impl::distal_distance(scale, thingify(arg, m)));
-                },
-                var);
-        }
-        case iexpr_type::radius:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
-        case iexpr_type::diameter:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
-                2.0 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
-        case iexpr_type::add:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
-                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
-                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
-        case iexpr_type::sub:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::sub(
-                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
-                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
-        case iexpr_type::mul:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::mul(
-                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
-                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
-        case iexpr_type::div:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::div(
-                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
-                thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
-        case iexpr_type::exp:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::exp(
-                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr>&>(expr.args())), m)));
-        case iexpr_type::log:
-            return std::unique_ptr<iexpr_interface>(new iexpr_impl::log(
-                thingify(std::get<0>(std::any_cast<const std::tuple<iexpr>&>(expr.args())), m)));
+        return std::visit(
+            [&](auto&& arg) {
+                return std::unique_ptr<iexpr_interface>(
+                    new iexpr_impl::distal_distance(scale, thingify(arg, m)));
+            },
+            var);
+    }
+    case iexpr_type::interpolation: {
+        const auto& t = std::any_cast<const std::
+                tuple<double, std::variant<locset, region>, double, std::variant<locset, region>>&>(
+            expr.args());
+        auto prox_list = std::visit(
+            [&](auto&& arg) -> std::variant<mlocation_list, mextent> { return thingify(arg, m); },
+            std::get<1>(t));
+
+        auto dist_list = std::visit(
+            [&](auto&& arg) -> std::variant<mlocation_list, mextent> { return thingify(arg, m); },
+            std::get<3>(t));
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::interpolation(
+            std::get<0>(t), std::move(prox_list), std::get<2>(t), std::move(dist_list)));
+    }
+    case iexpr_type::radius:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+            std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+    case iexpr_type::diameter:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::radius(
+            2.0 * std::get<0>(std::any_cast<const std::tuple<double>&>(expr.args()))));
+    case iexpr_type::add:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::add(
+            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+            thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+    case iexpr_type::sub:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::sub(
+            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+            thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+    case iexpr_type::mul:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::mul(
+            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+            thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+    case iexpr_type::div:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::div(
+            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m),
+            thingify(std::get<1>(std::any_cast<const std::tuple<iexpr, iexpr>&>(expr.args())), m)));
+    case iexpr_type::exp:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::exp(
+            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr>&>(expr.args())), m)));
+    case iexpr_type::log:
+        return std::unique_ptr<iexpr_interface>(new iexpr_impl::log(
+            thingify(std::get<0>(std::any_cast<const std::tuple<iexpr>&>(expr.args())), m)));
     }
 
     throw std::runtime_error("thingify iexpr: Unknown iexpr type");

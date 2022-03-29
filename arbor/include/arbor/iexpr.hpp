@@ -2,8 +2,8 @@
 
 // Implementations for inhomogeneous expressions.
 
-#include <memory>
 #include <any>
+#include <memory>
 
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/primitives.hpp>
@@ -15,6 +15,7 @@ enum class iexpr_type {
     distance,
     proximal_distance,
     distal_distance,
+    interpolation,
     radius,
     diameter,
     add,
@@ -47,6 +48,16 @@ struct iexpr {
 
     static iexpr distal_distance(double scale, region reg);
 
+    static iexpr interpolation(double prox_value,
+        locset prox_list,
+        double dist_value,
+        locset dist_list);
+
+    static iexpr interpolation(double prox_value,
+        region prox_list,
+        double dist_value,
+        region dist_list);
+
     static iexpr radius(double scale);
 
     static iexpr diameter(double scale);
@@ -64,43 +75,31 @@ struct iexpr {
     static iexpr log(iexpr value);
 
 private:
-    iexpr(iexpr_type type, std::any args) : type_(type), args_(std::move(args)) {}
+    iexpr(iexpr_type type, std::any args): type_(type), args_(std::move(args)) {}
 
     iexpr_type type_;
     std::any args_;
 };
 
-inline iexpr operator+(iexpr a, iexpr b) {
-    return iexpr::add(std::move(a), std::move(b));
-}
+inline iexpr operator+(iexpr a, iexpr b) { return iexpr::add(std::move(a), std::move(b)); }
 
-inline iexpr operator-(iexpr a, iexpr b) {
-    return iexpr::sub(std::move(a), std::move(b));
-}
+inline iexpr operator-(iexpr a, iexpr b) { return iexpr::sub(std::move(a), std::move(b)); }
 
-inline iexpr operator*(iexpr a, iexpr b) {
-    return iexpr::mul(std::move(a), std::move(b));
-}
+inline iexpr operator*(iexpr a, iexpr b) { return iexpr::mul(std::move(a), std::move(b)); }
 
-inline iexpr operator/(iexpr a, iexpr b) {
-    return iexpr::div(std::move(a), std::move(b));
-}
+inline iexpr operator/(iexpr a, iexpr b) { return iexpr::div(std::move(a), std::move(b)); }
 
-inline iexpr operator+(iexpr a) {
-    return a;
-}
+inline iexpr operator+(iexpr a) { return a; }
 
-inline iexpr operator-(iexpr a) {
-    return iexpr::mul(-1.0, std::move(a));
-}
+inline iexpr operator-(iexpr a) { return iexpr::mul(-1.0, std::move(a)); }
 
 struct iexpr_interface {
 
-    virtual double eval(const mprovider &p, const mcable &c) const = 0;
+    virtual double eval(const mprovider& p, const mcable& c) const = 0;
 
     virtual ~iexpr_interface() = default;
 };
 
 std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m);
 
-} // namespace arb
+}  // namespace arb
