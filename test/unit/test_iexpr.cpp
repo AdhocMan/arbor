@@ -1,5 +1,7 @@
 #include "../gtest.h"
 #include "arbor/morph/primitives.hpp"
+#include "../common_cells.hpp"
+#include "fvm_layout.hpp"
 
 #include <arbor/cable_cell.hpp>
 #include <arbor/cable_cell_param.hpp>
@@ -389,4 +391,60 @@ TEST(iexpr, log) {
 
     auto e = thingify(arb::iexpr::log(arb::iexpr::radius(3.0)), prov);
     EXPECT_DOUBLE_EQ(e->eval(prov, {0, 0.0, 1.0}), std::log(3.0 * 10.0));
+}
+
+TEST(iexpr, fvm_layout) {
+    const double radius = 2.0;
+    const double radius_scale = 3.0;
+    const std::string scaled_param = "gnabar";
+    auto iexpr_radius = arb::iexpr::radius(radius_scale);
+
+    soma_cell_builder builder(12.6157 / 2.0);
+    builder.add_branch(0, 100, radius, radius, 4, "dend");
+
+    auto desc_ref = builder.make_cell();
+    desc_ref.decorations.paint("soma"_lab, density("pas"));
+    desc_ref.decorations.paint("dend"_lab, density("hh"));
+
+    auto desc_scaled = builder.make_cell();
+    desc_scaled.decorations.paint("soma"_lab, density("pas"));
+    desc_scaled.decorations.paint("dend"_lab, scaled_property(density("hh")).scale(scaled_param, iexpr_radius));
+
+    cable_cell_global_properties gprop_coalesce;
+    gprop_coalesce.default_parameters = neuron_parameter_defaults;
+    gprop_coalesce.coalesce_synapses = true;
+
+    cable_cell cell_ref(desc_ref);
+    fvm_mechanism_data data_ref = fvm_build_mechanism_data(gprop_coalesce,
+        {cell_ref},
+        {0},
+        {{0, {}}},
+        fvm_cv_discretize({cell_ref}, neuron_parameter_defaults));
+
+    cable_cell cell_scaled(desc_scaled);
+    fvm_mechanism_data data_scaled = fvm_build_mechanism_data(gprop_coalesce,
+        {cell_scaled},
+        {0},
+        {{0, {}}},
+        fvm_cv_discretize({cell_scaled}, neuron_parameter_defaults));
+
+    // compare parameter values between reference and scaled fvm data
+    for(const auto& m_ref : data_ref.mechanisms) {
+        auto it_scaled = data_scaled.mechanisms.find(m_ref.first);
+        ASSERT_NE(it_scaled, data_scaled.mechanisms.end()); // make sure mech exists in both
+
+        const auto& param_ref = m_ref.second.param_values;
+        const auto& param_scaled = it_scaled->second.param_values;
+        ASSERT_EQ(param_ref.size(), param_scaled.size());
+
+        for (auto i: util::count_along(m_ref.second.param_values)) {
+            ASSERT_STREQ(param_ref[i].first.c_str(), param_scaled[i].first.c_str());
+            ASSERT_EQ(param_ref[i].second.size(), param_ref[i].second.size());
+
+            const double scale = param_scaled[i].first == scaled_param ? radius * radius_scale : 1.0;
+            for (auto j: util::count_along(param_ref[i].second)) {
+                EXPECT_DOUBLE_EQ(scale * param_ref[i].second[j], param_scaled[i].second[j]);
+            }
+        }
+    }
 }
