@@ -10,6 +10,7 @@
 #include <arbor/util/expected.hpp>
 #include <arbor/morph/locset.hpp>
 #include <arbor/morph/region.hpp>
+#include <arbor/iexpr.hpp>
 
 namespace arborio {
 using namespace arb;
@@ -23,6 +24,8 @@ template <> inline
 bool match<arb::locset>(const std::type_info& info) { return info == typeid(arb::locset); }
 template <> inline
 bool match<arb::region>(const std::type_info& info) { return info == typeid(arb::region); }
+template <> inline
+bool match<arb::iexpr>(const std::type_info& info) { return info == typeid(arb::iexpr); }
 
 // Convert a value wrapped in a std::any to target type.
 template <typename T>

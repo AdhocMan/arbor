@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 
@@ -7,6 +8,7 @@
 #include <arbor/morph/primitives.hpp>
 #include <arbor/morph/label_dict.hpp>
 #include <arbor/util/expected.hpp>
+#include <arbor/iexpr.hpp>
 
 namespace arb {
 
@@ -19,6 +21,7 @@ struct mprovider {
     // Throw exception on missing or recursive definition.
     const mextent& region(const std::string& name) const;
     const mlocation_list& locset(const std::string& name) const;
+    const std::shared_ptr<iexpr_interface>& iexpr(const std::string& name) const;
 
     // Read-only access to morphology and constructed embedding.
     const auto& morphology() const { return morphology_; }
@@ -36,6 +39,7 @@ private:
     // Maps are mutated only during initialization phase of mprovider.
     mutable std::unordered_map<std::string, util::expected<mextent, circular_def>> regions_;
     mutable std::unordered_map<std::string, util::expected<mlocation_list, circular_def>> locsets_;
+    mutable std::unordered_map<std::string, util::expected<std::shared_ptr<iexpr_interface>, circular_def>> iexpressions_;
 
     // Non-null only during initialization phase.
     mutable const label_dict* label_dict_ptr;

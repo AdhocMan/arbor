@@ -4,11 +4,16 @@
 
 #include <any>
 #include <memory>
+#include <string>
+#include <ostream>
 
-#include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/primitives.hpp>
+#include <arbor/morph/region.hpp>
+#include <arbor/morph/locset.hpp>
 
 namespace arb {
+
+struct mprovider;
 
 enum class iexpr_type {
     scalar,
@@ -23,7 +28,8 @@ enum class iexpr_type {
     mul,
     div,
     exp,
-    log
+    log,
+    named
 };
 
 struct iexpr {
@@ -74,12 +80,17 @@ struct iexpr {
 
     static iexpr log(iexpr value);
 
+    static iexpr named(std::string name);
+
+
 private:
     iexpr(iexpr_type type, std::any args): type_(type), args_(std::move(args)) {}
 
     iexpr_type type_;
     std::any args_;
 };
+
+std::ostream& operator<<(std::ostream& o, const iexpr& e);
 
 inline iexpr operator+(iexpr a, iexpr b) { return iexpr::add(std::move(a), std::move(b)); }
 
@@ -100,6 +111,6 @@ struct iexpr_interface {
     virtual ~iexpr_interface() = default;
 };
 
-std::unique_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m);
+std::shared_ptr<iexpr_interface> thingify(const iexpr& expr, const mprovider& m);
 
 }  // namespace arb

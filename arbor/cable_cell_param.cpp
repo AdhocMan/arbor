@@ -8,7 +8,6 @@
 
 #include <arbor/cable_cell.hpp>
 #include <arbor/cable_cell_param.hpp>
-#include <arbor/iexpr.hpp>
 #include <arbor/s_expr.hpp>
 
 #include "util/maputil.hpp"

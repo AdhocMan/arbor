@@ -131,6 +131,11 @@ std::string mechanism_desc_str(const arb::mechanism_desc& md) {
             md.name(), util::dictionary_csv(md.values()));
 }
 
+std::string scaled_density_desc_str(const arb::scaled_property<arb::density>& p) {
+    return util::pprintf("({}, {})",
+            mechanism_desc_str(p.prop.mech), util::dictionary_csv(p.scale_expr));
+}
+
 void register_cells(pybind11::module& m) {
     using namespace pybind11::literals;
     using std::optional;
@@ -418,7 +423,8 @@ void register_cells(pybind11::module& m) {
 
     // arb::scaled_property<arb::density>
 
-    pybind11::class_<arb::scaled_property<arb::density>> scaled_property(m, "scaled_property", "For painting a scaled density mechanism on a region.");
+    pybind11::class_<arb::scaled_property<arb::density>> scaled_property(
+        m, "scaled_property", "For painting a scaled density mechanism on a region.");
     scaled_property
         .def(pybind11::init(
             [](arb::density dens) { return arb::scaled_property<arb::density>(dens); }))
@@ -426,10 +432,18 @@ void register_cells(pybind11::module& m) {
             "scale",
             [](arb::scaled_property<arb::density>& s, std::string name, const std::string& ex) {
                 s.scale(std::move(name), arborio::parse_iexpr_expression(ex).unwrap());
+                return s;
             },
             pybind11::arg_v("name", "name of parameter to scale."),
             pybind11::arg_v("ex", "iexpr for scaling"),
-            "Add a scaling expression to a parameter.");
+            "Add a scaling expression to a parameter.")
+        .def("__repr__",
+            [](const arb::scaled_property<arb::density>& d) {
+                return "<arbor.scaled_property<density> " + scaled_density_desc_str(d) + ">";
+            })
+        .def("__str__", [](const arb::scaled_property<arb::density>& d) {
+            return "<arbor.scaled_property<density> " + scaled_density_desc_str(d) + ">";
+        });
 
     // arb::synapse
 
