@@ -90,14 +90,16 @@ s_expr mksexp(const density& j) {
 s_expr mksexp(const iexpr& j) {
     std::stringstream s;
     s << j;
-    return s_expr(s.str());
+    return parse_s_expr(s.str());
 }
 template <typename Prop>
 s_expr mksexp(const scaled_property<Prop>& j) {
     std::vector<s_expr> expressions;
-    std::transform(j.scale_expr.begin(), j.scale_expr.end(), std::back_inserter(expressions),
-        [](const auto& x){return s_expr(x.first) + mksexp(x.second);});
-    return slist("scaled_property"_symbol, mksexp(j.prop), slist_range(expressions));
+    std::transform(j.scale_expr.begin(),
+        j.scale_expr.end(),
+        std::back_inserter(expressions),
+        [](const auto& x) { return slist(s_expr(x.first), mksexp(x.second)); });
+    return slist("scaled-property"_symbol, mksexp(j.prop), expressions[0]);
 }
 s_expr mksexp(const mpoint& p) {
     return slist("point"_symbol, p.x, p.y, p.z, p.radius);
@@ -429,7 +431,7 @@ struct scaled_property_eval {
 template <typename Prop>
 struct make_scaled_property_call {
     evaluator state;
-    make_scaled_property_call(const char* msg="scaled_property"):
+    make_scaled_property_call(const char* msg="scaled-property"):
         state(scaled_property_eval<Prop>(), scaled_property_match<Prop>(), msg)
     {}
     operator evaluator() const {
@@ -662,7 +664,7 @@ eval_map named_evals{
     {"junction", make_call<arb::mechanism_desc>(make_wrapped_mechanism<junction>, "'junction' with 1 argumnet (m: mechanism)")},
     {"synapse",  make_call<arb::mechanism_desc>(make_wrapped_mechanism<synapse>, "'synapse' with 1 argumnet (m: mechanism)")},
     {"density",  make_call<arb::mechanism_desc>(make_wrapped_mechanism<density>, "'density' with 1 argumnet (m: mechanism)")},
-    {"scaled_property", make_scaled_property_call<arb::density>("'scaled_property' with a density argument, and 0 or more parameter scaling expressions"
+    {"scaled-property", make_scaled_property_call<arb::density>("'scaled_property' with a density argument, and 0 or more parameter scaling expressions"
         "(d:density (param:string val:iexpr))")},
     {"place", make_call<locset, i_clamp, std::string>(make_place, "'place' with 3 arguments (ls:locset c:current-clamp name:string)")},
     {"place", make_call<locset, threshold_detector, std::string>(make_place, "'place' with 3 arguments (ls:locset t:threshold-detector name:string)")},
