@@ -416,6 +416,21 @@ void register_cells(pybind11::module& m) {
         .def("__repr__", [](const arb::density& d){return "<arbor.density " + mechanism_desc_str(d.mech) + ">";})
         .def("__str__", [](const arb::density& d){return "<arbor.density " + mechanism_desc_str(d.mech) + ">";});
 
+    // arb::scaled_property<arb::density>
+
+    pybind11::class_<arb::scaled_property<arb::density>> scaled_property(m, "scaled_property", "For painting a scaled density mechanism on a region.");
+    scaled_property
+        .def(pybind11::init(
+            [](arb::density dens) { return arb::scaled_property<arb::density>(dens); }))
+        .def(
+            "scale",
+            [](arb::scaled_property<arb::density>& s, std::string name, const std::string& ex) {
+                s.scale(std::move(name), arborio::parse_iexpr_expression(ex).unwrap());
+            },
+            pybind11::arg_v("name", "name of parameter to scale."),
+            pybind11::arg_v("ex", "iexpr for scaling"),
+            "Add a scaling expression to a parameter.");
+
     // arb::synapse
 
     pybind11::class_<arb::synapse> synapse(m, "synapse", "For placing a synaptic mechanism on a locset.");
@@ -623,6 +638,12 @@ void register_cells(pybind11::module& m) {
             },
             "region"_a, "mechanism"_a,
             "Associate a density mechanism with a region.")
+        .def("paint",
+            [](arb::decor& dec, const char* region, const arb::scaled_property<arb::density>& mechanism) {
+                dec.paint(arborio::parse_region_expression(region).unwrap(), mechanism);
+            },
+            "region"_a, "mechanism"_a,
+            "Associate a scaled density mechanism with a region.")
         // Paint membrane/static properties.
         .def("paint",
             [](arb::decor& dec,
