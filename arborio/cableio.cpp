@@ -147,6 +147,9 @@ s_expr mksexp(const label_dict& dict) {
     for (auto& r: dict.regions()) {
         defs = s_expr(slist("region-def"_symbol, s_expr(r.first), round_trip(r.second)), std::move(defs));
     }
+    for (auto& r: dict.iexpressions()) {
+        defs = s_expr(slist("iexpr-def"_symbol, s_expr(r.first), round_trip(r.second)), std::move(defs));
+    }
     return {"label-dict"_symbol, std::move(defs)};
 }
 s_expr mksexp(const morphology& morph) {
@@ -708,7 +711,7 @@ eval_map named_evals{
     {"decor", make_arg_vec_call<place_tuple, paint_pair, defaultable>(make_decor,
         "'decor' with 1 or more `paint`, `place` or `default` arguments")},
     {"label-dict", make_arg_vec_call<locset_pair, region_pair, iexpr_pair>(make_label_dict,
-        "'label-dict' with 1 or more `locset-def` or `region-def` arguments")},
+        "'label-dict' with 1 or more `locset-def` or `region-def` or `iexpr-def` arguments")},
     {"morphology", make_arg_vec_call<branch_tuple>(make_morphology,
         "'morphology' 1 or more `branch` arguments")},
 
