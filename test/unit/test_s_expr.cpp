@@ -502,7 +502,11 @@ std::ostream& operator<<(std::ostream& o, const density& p) {
     return o << "(density " << p.mech << ')';
 }
 std::ostream& operator<<(std::ostream& o, const scaled_property<density>& p) {
-    return o << "(scaled_property<density> " << p.prop.mech << ')'; // TODO: print iexpr
+    o << "(scaled-property " << p.prop;
+    for(const auto& s : p.scale_expr) {
+        o << " (\"" << s.first << "\" " << s.second <<")";
+    }
+    return o << ")";
 }
 std::ostream& operator<<(std::ostream& o, const ion_reversal_potential_method& p) {
     return o << "(ion-reversal-potential-method \"" << p.ion << "\" " << p.method << ')';
@@ -615,6 +619,8 @@ TEST(decor_literals, round_tripping) {
     auto paint_literals = {
         "(density (mechanism \"hh\"))",
         "(density (mechanism \"pas\" (\"g\" 0.02)))",
+        "(scaled-property (density (mechanism \"pas\" (\"g\" 0.02))))",
+        "(scaled-property (density (mechanism \"pas\" (\"g\" 0.02))) (\"g\" (exp (add (radius 2.1) (scalar 3.2)))))",
     };
     auto default_literals = {
         "(ion-reversal-potential-method \"ca\" (mechanism \"nernst/ca\"))",
@@ -669,6 +675,7 @@ TEST(decor_expressions, round_tripping) {
         "(paint (intersect (cable 2 0 0.5) (region \"axon\")) (ion-external-concentration \"h\" -50.1))",
         "(paint (region \"my_region\") (ion-reversal-potential \"na\" 30))",
         "(paint (cable 2 0.1 0.4) (density (mechanism \"hh\")))",
+        "(paint (cable 2 0.1 0.4) (scaled-property (density (mechanism \"pas\" (\"g\" 0.02))) (\"g\" (exp (add (distance 2.1 (region \"my_region\")) (scalar 3.2))))))",
         "(paint (all) (density (mechanism \"pas\" (\"g\" 0.02))))"
     };
     auto decorate_default_literals = {
@@ -756,6 +763,18 @@ TEST(decor, round_tripping) {
                                 "      (density \n"
                                 "        (mechanism \"pas\")))\n"
                                 "    (paint \n"
+                                "      (region \"dend\")\n"
+                                "      (scaled-property \n"
+                                "        (density \n"
+                                "          (mechanism \"pas\"))))\n"
+                                "    (paint \n"
+                                "      (region \"soma\")\n"
+                                "      (scaled-property \n"
+                                "        (density \n"
+                                "          (mechanism \"pas\"))\n"
+                                "        (\"g\" \n"
+                                "          (radius 2.1))))\n"
+                                "    (paint \n"
                                 "      (region \"soma\")\n"
                                 "      (density \n"
                                 "        (mechanism \"hh\")))\n"
@@ -788,6 +807,11 @@ TEST(label_dict, round_tripping) {
                                 "  (meta-data \n"
                                 "    (version \"" + arborio::acc_version() + "\"))\n"
                                 "  (label-dict \n"
+                                "    (iexpr-def \"my_iexpr\" \n"
+                                "      (log \n"
+                                "        (mul \n"
+                                "          (scalar 3.5)\n"
+                                "          (diameter 4.3))))\n"
                                 "    (region-def \"soma\" \n"
                                 "      (tag 1))\n"
                                 "    (region-def \"dend\" \n"
@@ -963,6 +987,8 @@ TEST(cable_cell, round_tripping) {
                                 "          (point 206.300000 0.000000 0.000000 0.200000)\n"
                                 "          3)))\n"
                                 "    (label-dict \n"
+                                "      (iexpr-def \"my_iexpr\" \n"
+                                "        (radius 2.1))\n"
                                 "      (region-def \"soma\" \n"
                                 "        (tag 1))\n"
                                 "      (region-def \"dend\" \n"
@@ -981,6 +1007,13 @@ TEST(cable_cell, round_tripping) {
                                 "        (density \n"
                                 "          (mechanism \"hh\" \n"
                                 "            (\"el\" 0.500000))))\n"
+                                "      (paint \n"
+                                "        (region \"soma\")\n"
+                                "        (scaled-property \n"
+                                "          (density \n"
+                                "            (mechanism \"pas\"))\n"
+                                "          (\"g\" \n"
+                                "            (iexpr \"my_iexpr\"))))\n"
                                 "      (place \n"
                                 "        (location 0 1)\n"
                                 "        (current-clamp \n"
