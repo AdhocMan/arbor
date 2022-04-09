@@ -206,6 +206,15 @@ std::string round_trip_locset(const char* in) {
     }
 }
 
+std::string round_trip_iexpr(const char* in) {
+    if (auto x = parse_iexpr_expression(in)) {
+        return util::pprintf("{}", std::any_cast<arb::iexpr>(*x));
+    }
+    else {
+        return x.error().what();
+    }
+}
+
 
 TEST(cv_policies, round_tripping) {
     auto literals = {"(every-segment (tag 42))",
@@ -242,6 +251,58 @@ TEST(cv_policies, bad) {
     EXPECT_THROW(check("(every-segment (terminal))"), cv_policy_parse_error); // locset instead of region
     EXPECT_THROW(check("(every-segment"), cv_policy_parse_error);             // missing paren
     EXPECT_THROW(check("(tag 42)"), cv_policy_parse_error);                   // not a cv_policy
+}
+
+TEST(iexpr, round_tripping) {
+    EXPECT_EQ("(cable 3 0 1)", round_trip_label<arb::region>("(branch 3)"));
+    EXPECT_EQ("(intersect (tag 1) (intersect (tag 2) (tag 3)))", round_trip_label<arb::region>("(intersect (tag 1) (tag 2) (tag 3))"));
+    auto iexpr_literals = {
+        "(scalar 2.1)",
+        "(distance 3.2 (region \"foo\"))",
+        "(distance 3.2 (location 3 0.2))",
+        "(proximal-distance 3.2 (region \"foo\"))",
+        "(proximal-distance 3.2 (location 3 0.2))",
+        "(distal-distance 3.2 (region \"foo\"))",
+        "(distal-distance 3.2 (location 3 0.2))",
+        "(interpolation 3.2 (region \"foo\") 4.3 (radius-gt (tag 3) 1))",
+        "(interpolation 3.2 (location 3 0.2) 4.3 (distal (tag 2)))",
+        "(radius 2.1)",
+        "(diameter 2.1)",
+        "(exp (scalar 2.1))",
+        "(log (scalar 2.1))",
+        "(add (scalar 2.1) (radius 3.2))",
+        "(sub (scalar 2.1) (radius 3.2))",
+        "(mul (scalar 2.1) (radius 3.2))",
+        "(div (scalar 2.1) (radius 3.2))",
+    };
+    for (auto l: iexpr_literals) {
+        EXPECT_EQ(l, round_trip_label<arb::iexpr>(l));
+        EXPECT_EQ(l, round_trip_iexpr(l));
+    }
+
+    // check double values for input instead of explicit scalar iexpr
+    auto mono_iexpr = {std::string("exp"), std::string("log")};
+    auto duo_iexpr = {std::string("add"), std::string("sub"), std::string("mul"), std::string("div")};
+    constexpr auto v1 = "1.2";
+    constexpr auto v2 = "1.2";
+    for(const auto& l : mono_iexpr) {
+        auto l_input = "(" + l + " " + v1 + ")";
+        auto l_output = "(" + l + " (scalar " + v1 + "))";
+        EXPECT_EQ(l_output.c_str(), round_trip_label<arb::iexpr>(l_input.c_str()));
+        EXPECT_EQ(l_output.c_str(), round_trip_iexpr(l_input.c_str()));
+    }
+    for(const auto& l : duo_iexpr) {
+        auto l_input_dd = "(" + l + " " + v1 + + " " + v2 +")";
+        auto l_input_sd = "(" + l + " (scalar " + v1 + + ") " + v2 +")";
+        auto l_input_ds = "(" + l + " " + v1 + + " (scalar " + v2 +"))";
+        auto l_output = "(" + l + " (scalar " + v1 + ") (scalar " + v2 +"))";
+        EXPECT_EQ(l_output.c_str(), round_trip_label<arb::iexpr>(l_input_dd.c_str()));
+        EXPECT_EQ(l_output.c_str(), round_trip_iexpr(l_input_dd.c_str()));
+        EXPECT_EQ(l_output.c_str(), round_trip_label<arb::iexpr>(l_input_sd.c_str()));
+        EXPECT_EQ(l_output.c_str(), round_trip_iexpr(l_input_sd.c_str()));
+        EXPECT_EQ(l_output.c_str(), round_trip_label<arb::iexpr>(l_input_ds.c_str()));
+        EXPECT_EQ(l_output.c_str(), round_trip_iexpr(l_input_ds.c_str()));
+    }
 }
 
 TEST(regloc, round_tripping) {
@@ -453,6 +514,7 @@ using place_tuple = std::tuple<arb::locset, arb::placeable, std::string>;
 using paint_pair = std::pair<arb::region, arb::paintable>;
 using locset_pair = std::pair<std::string, locset>;
 using region_pair = std::pair<std::string, region>;
+using iexpr_pair = std::pair<std::string, iexpr>;
 
 std::ostream& operator<<(std::ostream& o, const i_clamp& c) {
     o << "(current-clamp (envelope";
@@ -541,6 +603,9 @@ std::ostream& operator<<(std::ostream& o, const locset_pair& p) {
 }
 std::ostream& operator<<(std::ostream& o, const region_pair& p) {
     return o << "(region-def \"" << p.first << "\" " << p.second << ")";
+}
+std::ostream& operator<<(std::ostream& o, const iexpr_pair& p) {
+    return o << "(iexpr-def \"" << p.first << "\" " << p.second << ")";
 }
 
 template <typename T>
@@ -716,11 +781,19 @@ TEST(label_dict_expressions, round_tripping) {
         "(region-def \"my region\" (all))",
         "(region-def \"reg42\" (cable 0 0.1 0.9))"
     };
+    auto iexpr_def_literals = {
+        "(iexpr-def \"my_iexpr\" (radius 1.2))",
+        "(iexpr-def \"my_iexpr_2\" (iexpr \"my_iexpr\"))",
+    };
+
     for (auto l: locset_def_literals) {
         EXPECT_EQ(l, round_trip<locset_pair>(l));
     }
     for (auto l: region_def_literals) {
         EXPECT_EQ(l, round_trip<region_pair>(l));
+    }
+    for (auto l: iexpr_def_literals) {
+        EXPECT_EQ(l, round_trip<iexpr_pair>(l));
     }
 }
 
