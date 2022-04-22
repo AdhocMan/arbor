@@ -501,8 +501,14 @@ std::ostream& operator<<(std::ostream& o, const synapse& p) {
 std::ostream& operator<<(std::ostream& o, const density& p) {
     return o << "(density " << p.mech << ')';
 }
-std::ostream& operator<<(std::ostream& o, const scaled_property<density>& p) {
-    return o << "(scaled_property<density> " << p.prop.mech << ')'; // TODO: print iexpr
+template <typename Prop>
+std::ostream& operator<<(std::ostream& o, const scaled_property<Prop>& p) {
+    o << "(scaled-property " << p.prop;
+    for (const auto& it: p.scale_expr) {
+        o << " (\"" << it.first << "\" " << it.second << ')';
+    }
+    o << ")";
+    return o;
 }
 std::ostream& operator<<(std::ostream& o, const ion_reversal_potential_method& p) {
     return o << "(ion-reversal-potential-method \"" << p.ion << "\" " << p.method << ')';

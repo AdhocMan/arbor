@@ -141,32 +141,22 @@ std::unordered_multimap<std::string, evaluator> eval_map {
             "iexpr with 4 arguments: (prox_value:double, prox_list:region, dist_value:double, dist_list:region)")},
 
     {"radius", make_call<double>(arb::iexpr::radius, "iexpr with 1 argument: (value:double)")},
+
     {"diameter", make_call<double>(arb::iexpr::diameter, "iexpr with 1 argument: (value:double)")},
 
     {"exp", make_call<arb::iexpr>(arb::iexpr::exp, "iexpr with 1 argument: (value:iexpr)")},
     {"exp", make_call<double>(arb::iexpr::exp, "iexpr with 1 argument: (value:double)")},
+
     {"log", make_call<arb::iexpr>(arb::iexpr::log, "iexpr with 1 argument: (value:iexpr)")},
     {"log", make_call<double>(arb::iexpr::log, "iexpr with 1 argument: (value:double)")},
 
-    {"add", make_call<arb::iexpr, arb::iexpr>(arb::iexpr::add, "iexpr with 2 arguments: (left:iexpr, right:iexpr)")},
-    {"add", make_call<arb::iexpr, double>(arb::iexpr::add, "iexpr with 2 arguments: (left:iexpr, right:double)")},
-    {"add", make_call<double, arb::iexpr>(arb::iexpr::add, "iexpr with 2 arguments: (left:double, right:iexpr)")},
-    {"add", make_call<double, double>(arb::iexpr::add, "iexpr with 2 arguments: (left:double, right:double)")},
+    {"add", make_conversion_fold<arb::iexpr, arb::iexpr, double>(arb::iexpr::add, "iexpr with at least 2 arguments: ((iexpr | double) (iexpr | double) [...(iexpr | double)])")},
 
-    {"sub", make_call<arb::iexpr, arb::iexpr>(arb::iexpr::sub, "iexpr with 2 arguments: (left:iexpr, right:iexpr)")},
-    {"sub", make_call<arb::iexpr, double>(arb::iexpr::sub, "iexpr with 2 arguments: (left:iexpr, right:double)")},
-    {"sub", make_call<double, arb::iexpr>(arb::iexpr::sub, "iexpr with 2 arguments: (left:double, right:iexpr)")},
-    {"sub", make_call<double, double>(arb::iexpr::sub, "iexpr with 2 arguments: (left:double, right:double)")},
+    {"sub", make_conversion_fold<arb::iexpr, arb::iexpr, double>(arb::iexpr::sub, "iexpr with at least 2 arguments: ((iexpr | double) (iexpr | double) [...(iexpr | double)])")},
 
-    {"mul", make_call<arb::iexpr, arb::iexpr>(arb::iexpr::mul, "iexpr with 2 arguments: (left:iexpr, right:iexpr)")},
-    {"mul", make_call<arb::iexpr, double>(arb::iexpr::mul, "iexpr with 2 arguments: (left:iexpr, right:double)")},
-    {"mul", make_call<double, arb::iexpr>(arb::iexpr::mul, "iexpr with 2 arguments: (left:double, right:iexpr)")},
-    {"mul", make_call<double, double>(arb::iexpr::mul, "iexpr with 2 arguments: (left:double, right:double)")},
+    {"mul", make_conversion_fold<arb::iexpr, arb::iexpr, double>(arb::iexpr::mul, "iexpr with at least 2 arguments: ((iexpr | double) (iexpr | double) [...(iexpr | double)])")},
 
-    {"div", make_call<arb::iexpr, arb::iexpr>(arb::iexpr::div, "iexpr with 2 arguments: (left:iexpr, right:iexpr)")},
-    {"div", make_call<arb::iexpr, double>(arb::iexpr::div, "iexpr with 2 arguments: (left:iexpr, right:double)")},
-    {"div", make_call<double, arb::iexpr>(arb::iexpr::div, "iexpr with 2 arguments: (left:double, right:iexpr)")},
-    {"div", make_call<double, double>(arb::iexpr::div, "iexpr with 2 arguments: (left:double, right:double)")},
+    {"div", make_conversion_fold<arb::iexpr, arb::iexpr, double>(arb::iexpr::div, "iexpr with at least 2 arguments: ((iexpr | double) (iexpr | double) [...(iexpr | double)])")},
 };
 
 parse_label_hopefully<std::any> eval(const s_expr& e);

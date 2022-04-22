@@ -699,7 +699,7 @@ eval_map named_evals{
     {"region-def", make_call<std::string, region>(make_region_pair,
         "'region-def' with 2 arguments (name:string reg:region)")},
     {"iexpr-def", make_call<std::string, iexpr>(make_iexpr_pair,
-        "'iexpr-def' with 2 arguments (name:string reg:iexpr)")},
+        "'iexpr-def' with 2 arguments (name:string e:iexpr)")},
 
     {"point",   make_call<double, double, double, double>(make_point,
          "'point' with 4 arguments (x:real y:real z:real radius:real)")},

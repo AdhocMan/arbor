@@ -60,6 +60,11 @@ std::optional<double> compute_proximal_distance(const mlocation& loc_prox,
     // check order if on same branch
     if (loc_prox.branch == loc_dist.branch && loc_prox.pos > loc_dist.pos) return std::nullopt;
 
+    // Special case root, for which no direction can be assumed. Always return the actual distance
+    // in this case.
+    if (loc_prox.pos == 0.0 && p.morphology().branch_parent(loc_prox.branch) == mnpos)
+        return p.embedding().integrate_length(loc_prox, loc_dist);
+
     // check if loc_prox branch is in proximal direction from loc_dist
     auto b = loc_dist.branch;
     while (b > loc_prox.branch) {

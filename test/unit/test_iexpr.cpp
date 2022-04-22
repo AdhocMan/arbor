@@ -1,11 +1,12 @@
 #include "../gtest.h"
-#include "arbor/morph/primitives.hpp"
 #include "../common_cells.hpp"
 #include "fvm_layout.hpp"
 
 #include <arbor/cable_cell.hpp>
 #include <arbor/cable_cell_param.hpp>
 #include <arbor/iexpr.hpp>
+#include <arbor/morph/locset.hpp>
+#include <arbor/morph/primitives.hpp>
 #include <arborio/label_parse.hpp>
 
 #include <cmath>
@@ -153,6 +154,11 @@ TEST(iexpr, distal_distance_locset) {
     EXPECT_DOUBLE_EQ(ex->eval(prov, {1, 0.0, 1.0}), scale * 3.0);
     EXPECT_DOUBLE_EQ(ex->eval(prov, {2, 0.0, 1.0}), 0.0);
     EXPECT_DOUBLE_EQ(ex->eval(prov, {3, 0.0, 1.0}), scale * 2.0);
+
+    // test distance to root
+    ex = thingify(arb::iexpr::distal_distance(scale, arb::ls::root()), prov);
+    EXPECT_DOUBLE_EQ(ex->eval(prov, {0, 0.0, 1.0}), scale * 5.0);
+    EXPECT_DOUBLE_EQ(ex->eval(prov, {3, 0.0, 1.0}), scale * 10.0);
 }
 
 TEST(iexpr, distal_distance_region) {
@@ -230,6 +236,15 @@ TEST(iexpr, interpolation_locset) {
     EXPECT_DOUBLE_EQ(
         ex->eval(prov, {2, 0.0, 1.0}), 6.0 / 23.0 * prox_value + 17.0 / 23.0 * dist_value);
     EXPECT_DOUBLE_EQ(ex->eval(prov, {3, 0.0, 1.0}), 0.0);
+
+    // test root
+    ex = thingify(
+        arb::iexpr::interpolation(prox_value, arb::ls::root(), dist_value, arb::ls::terminal()),
+        prov);
+    EXPECT_DOUBLE_EQ(ex->eval(prov, {0, 0.0, 1.0}), 15.0 / 20.0 * prox_value + 5.0 / 20.0 * dist_value);
+    EXPECT_DOUBLE_EQ(ex->eval(prov, {1, 0.0, 1.0}), 5.0 / 20.0 * prox_value + 15.0 / 20.0 * dist_value);
+    EXPECT_DOUBLE_EQ(ex->eval(prov, {2, 0.0, 1.0}), 10.0 / 30.0 * prox_value + 20.0 / 30.0 * dist_value);
+    EXPECT_DOUBLE_EQ(ex->eval(prov, {3, 0.0, 1.0}), 10.0 / 20.0 * prox_value + 10.0 / 20.0 * dist_value);
 }
 
 TEST(iexpr, interpolation_region) {
