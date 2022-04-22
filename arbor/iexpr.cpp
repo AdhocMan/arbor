@@ -520,7 +520,7 @@ std::ostream& operator<<(std::ostream& o, const iexpr& e) {
         using arg_type =
             std::tuple<double, std::variant<locset, region>, double, std::variant<locset, region>>;
 
-        o << "distal-distance " << std::get<0>(std::any_cast<const arg_type&>(e.args())) << " ";
+        o << "interpolation " << std::get<0>(std::any_cast<const arg_type&>(e.args())) << " ";
         std::visit([&](auto&& arg) { o << arg; }, std::get<1>(std::any_cast<const arg_type&>(e.args())));
         o << " " << std::get<2>(std::any_cast<const arg_type&>(e.args())) << " ";
         std::visit([&](auto&& arg) { o << arg; }, std::get<3>(std::any_cast<const arg_type&>(e.args())));

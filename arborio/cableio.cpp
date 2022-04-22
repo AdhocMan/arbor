@@ -99,7 +99,7 @@ s_expr mksexp(const scaled_mechanism<TaggedMech>& j) {
         j.scale_expr.end(),
         std::back_inserter(expressions),
         [](const auto& x) { return slist(s_expr(x.first), mksexp(x.second)); });
-    return slist("scaled-mechanism"_symbol, mksexp(j.t_mech), expressions[0]);
+    return s_expr{"scaled-mechanism"_symbol, s_expr{mksexp(j.t_mech), slist_range(expressions)}};
 }
 s_expr mksexp(const mpoint& p) {
     return slist("point"_symbol, p.x, p.y, p.z, p.radius);
@@ -682,7 +682,7 @@ eval_map named_evals{
     {"paint", make_call<region, init_ext_concentration>(make_paint, "'paint' with 2 arguments (reg:region v:ion-external-concentration)")},
     {"paint", make_call<region, init_reversal_potential>(make_paint, "'paint' with 2 arguments (reg:region v:ion-reversal-potential)")},
     {"paint", make_call<region, density>(make_paint, "'paint' with 2 arguments (reg:region v:density)")},
-    {"paint", make_call<region, scaled_mechanism<density>>(make_paint, "'paint' with 2 arguments (reg:region v:scaled_mechanism<density>)")},
+    {"paint", make_call<region, scaled_mechanism<density>>(make_paint, "'paint' with 2 arguments (reg:region v:scaled-mechanism)")},
 
     {"default", make_call<init_membrane_potential>(make_default, "'default' with 1 argument (v:membrane-potential)")},
     {"default", make_call<temperature_K>(make_default, "'default' with 1 argument (v:temperature-kelvin)")},
