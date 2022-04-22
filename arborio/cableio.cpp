@@ -92,14 +92,14 @@ s_expr mksexp(const iexpr& j) {
     s << j;
     return parse_s_expr(s.str());
 }
-template <typename Prop>
-s_expr mksexp(const scaled_property<Prop>& j) {
+template <typename TaggedMech>
+s_expr mksexp(const scaled_mechanism<TaggedMech>& j) {
     std::vector<s_expr> expressions;
     std::transform(j.scale_expr.begin(),
         j.scale_expr.end(),
         std::back_inserter(expressions),
         [](const auto& x) { return slist(s_expr(x.first), mksexp(x.second)); });
-    return slist("scaled-property"_symbol, mksexp(j.prop), expressions[0]);
+    return slist("scaled-mechanism"_symbol, mksexp(j.t_mech), expressions[0]);
 }
 s_expr mksexp(const mpoint& p) {
     return slist("point"_symbol, p.x, p.y, p.z, p.radius);
@@ -403,12 +403,12 @@ struct make_mech_call {
 
 // Test whether a list of arguments passed as a std::vector<std::any> can be converted
 // to a string followed by any number of std::pair<std::string, arb::iexpr>
-template <typename Prop>
-struct scaled_property_match {
+template <typename TaggedMech>
+struct scaled_mechanism_match {
     bool operator()(const std::vector<std::any>& args) const {
         // First argument is the mech name
         if (args.size() < 1) return false;
-        if (!match<Prop>(args.front().type())) return false;
+        if (!match<TaggedMech>(args.front().type())) return false;
 
         // The rest of the arguments should be tuples
         for (auto it = args.begin()+1; it != args.end(); ++it) {
@@ -418,10 +418,10 @@ struct scaled_property_match {
     }
 };
 // Create a mechanism_desc from a std::vector<std::any>.
-template <typename Prop>
-struct scaled_property_eval {
-    arb::scaled_property<Prop> operator()(const std::vector<std::any>& args) {
-        auto d = scaled_property(eval_cast<Prop>(args.front()));
+template <typename TaggedMech>
+struct scaled_mechanism_eval {
+    arb::scaled_mechanism<TaggedMech> operator()(const std::vector<std::any>& args) {
+        auto d = scaled_mechanism(eval_cast<TaggedMech>(args.front()));
 
         for (auto it = args.begin() + 1; it != args.end(); ++it) {
             auto p = eval_cast<std::tuple<std::string, arb::iexpr>>(*it);
@@ -431,11 +431,11 @@ struct scaled_property_eval {
     }
 };
 // Wrap mech_match and mech_eval in an evaluator
-template <typename Prop>
-struct make_scaled_property_call {
+template <typename TaggedMech>
+struct make_scaled_mechanism_call {
     evaluator state;
-    make_scaled_property_call(const char* msg="scaled-property"):
-        state(scaled_property_eval<Prop>(), scaled_property_match<Prop>(), msg)
+    make_scaled_mechanism_call(const char* msg="scaled-mechanism"):
+        state(scaled_mechanism_eval<TaggedMech>(), scaled_mechanism_match<TaggedMech>(), msg)
     {}
     operator evaluator() const {
         return state;
@@ -667,7 +667,7 @@ eval_map named_evals{
     {"junction", make_call<arb::mechanism_desc>(make_wrapped_mechanism<junction>, "'junction' with 1 argumnet (m: mechanism)")},
     {"synapse",  make_call<arb::mechanism_desc>(make_wrapped_mechanism<synapse>, "'synapse' with 1 argumnet (m: mechanism)")},
     {"density",  make_call<arb::mechanism_desc>(make_wrapped_mechanism<density>, "'density' with 1 argumnet (m: mechanism)")},
-    {"scaled-property", make_scaled_property_call<arb::density>("'scaled_property' with a density argument, and 0 or more parameter scaling expressions"
+    {"scaled-mechanism", make_scaled_mechanism_call<arb::density>("'scaled_mechanism' with a density argument, and 0 or more parameter scaling expressions"
         "(d:density (param:string val:iexpr))")},
     {"place", make_call<locset, i_clamp, std::string>(make_place, "'place' with 3 arguments (ls:locset c:current-clamp name:string)")},
     {"place", make_call<locset, threshold_detector, std::string>(make_place, "'place' with 3 arguments (ls:locset t:threshold-detector name:string)")},
@@ -682,7 +682,7 @@ eval_map named_evals{
     {"paint", make_call<region, init_ext_concentration>(make_paint, "'paint' with 2 arguments (reg:region v:ion-external-concentration)")},
     {"paint", make_call<region, init_reversal_potential>(make_paint, "'paint' with 2 arguments (reg:region v:ion-reversal-potential)")},
     {"paint", make_call<region, density>(make_paint, "'paint' with 2 arguments (reg:region v:density)")},
-    {"paint", make_call<region, scaled_property<density>>(make_paint, "'paint' with 2 arguments (reg:region v:scaled_property<density>)")},
+    {"paint", make_call<region, scaled_mechanism<density>>(make_paint, "'paint' with 2 arguments (reg:region v:scaled_mechanism<density>)")},
 
     {"default", make_call<init_membrane_potential>(make_default, "'default' with 1 argument (v:membrane-potential)")},
     {"default", make_call<temperature_K>(make_default, "'default' with 1 argument (v:temperature-kelvin)")},

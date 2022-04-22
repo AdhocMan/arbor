@@ -501,9 +501,9 @@ std::ostream& operator<<(std::ostream& o, const synapse& p) {
 std::ostream& operator<<(std::ostream& o, const density& p) {
     return o << "(density " << p.mech << ')';
 }
-template <typename Prop>
-std::ostream& operator<<(std::ostream& o, const scaled_property<Prop>& p) {
-    o << "(scaled-property " << p.prop;
+template <typename TaggedMech>
+std::ostream& operator<<(std::ostream& o, const scaled_mechanism<TaggedMech>& p) {
+    o << "(scaled-mechanism " << p.t_mech;
     for (const auto& it: p.scale_expr) {
         o << " (\"" << it.first << "\" " << it.second << ')';
     }

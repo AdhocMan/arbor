@@ -118,12 +118,12 @@ struct cable_cell_impl {
     }
 
     void paint(const region& reg, const density& prop) {
-        this->paint(reg, scaled_property<density>(prop));
+        this->paint(reg, scaled_mechanism<density>(prop));
     }
 
-    void paint(const region &reg, const scaled_property<density> &prop) {
+    void paint(const region &reg, const scaled_mechanism<density> &prop) {
       mextent cables = thingify(reg, provider);
-      auto &mm = get_region_map(prop.prop);
+      auto &mm = get_region_map(prop.t_mech);
 
       std::unordered_map<std::string, std::shared_ptr<iexpr_interface>> im;
       for(const auto& it : prop.scale_expr) {
@@ -135,14 +135,14 @@ struct cable_cell_impl {
         if (c.prox_pos == c.dist_pos)
           continue;
 
-        if (!mm.insert(c, {prop.prop, im})) {
+        if (!mm.insert(c, {prop.t_mech, im})) {
           throw cable_cell_error(util::pprintf("cable {} overpaints", c));
         }
       }
     }
 
-    template <typename Property>
-    void paint(const region& reg, const Property& prop) {
+    template <typename TaggedMech>
+    void paint(const region& reg, const TaggedMech& prop) {
         mextent cables = thingify(reg, provider);
         auto& mm = get_region_map(prop);
 

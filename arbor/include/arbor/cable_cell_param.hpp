@@ -225,14 +225,14 @@ struct ion_reversal_potential_method {
     mechanism_desc method;
 };
 
-template <typename Property>
-struct scaled_property {
-    Property prop;
+template <typename TaggedMech>
+struct scaled_mechanism {
+    TaggedMech t_mech;
     std::unordered_map<std::string, iexpr> scale_expr;
 
-    explicit scaled_property(Property p) : prop(std::move(p)) {}
+    explicit scaled_mechanism(TaggedMech m) : t_mech(std::move(m)) {}
 
-    scaled_property& scale(std::string name, iexpr expr) {
+    scaled_mechanism& scale(std::string name, iexpr expr) {
         scale_expr.insert_or_assign(name, expr);
         return *this;
     }
@@ -247,7 +247,7 @@ using paintable =
                  init_ext_concentration,
                  init_reversal_potential,
                  density,
-                 scaled_property<density>>;
+                 scaled_mechanism<density>>;
 
 using placeable =
     std::variant<i_clamp,

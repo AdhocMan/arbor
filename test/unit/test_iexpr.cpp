@@ -423,7 +423,7 @@ TEST(iexpr, fvm_layout) {
 
     auto desc_scaled = builder.make_cell();
     desc_scaled.decorations.paint("soma"_lab, density("pas"));
-    desc_scaled.decorations.paint("dend"_lab, scaled_property(density("hh")).scale(scaled_param, iexpr_radius));
+    desc_scaled.decorations.paint("dend"_lab, scaled_mechanism(density("hh")).scale(scaled_param, iexpr_radius));
 
     cable_cell_global_properties gprop_coalesce;
     gprop_coalesce.default_parameters = neuron_parameter_defaults;
