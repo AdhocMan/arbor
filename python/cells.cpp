@@ -427,7 +427,15 @@ void register_cells(pybind11::module& m) {
         m, "scaled_property", "For painting a scaled density mechanism on a region.");
     scaled_property
         .def(pybind11::init(
-            [](arb::density dens) { return arb::scaled_property<arb::density>(dens); }))
+            [](arb::density dens) { return arb::scaled_property<arb::density>(std::move(dens)); }))
+        .def(pybind11::init(
+            [](arb::density dens, const std::unordered_map<std::string, std::string>& scales) {
+                auto s = arb::scaled_property<arb::density>(std::move(dens));
+                for (const auto& it: scales) {
+                    s.scale(it.first, arborio::parse_iexpr_expression(it.second).unwrap());
+                }
+                return s;
+            }))
         .def(
             "scale",
             [](arb::scaled_property<arb::density>& s, std::string name, const std::string& ex) {
