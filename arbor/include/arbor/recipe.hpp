@@ -7,6 +7,7 @@
 #include <arbor/export.hpp>
 #include <arbor/common_types.hpp>
 #include <arbor/event_generator.hpp>
+#include <arbor/util/lexcmp_def.hpp>
 #include <arbor/util/unique_any.hpp>
 
 namespace arb {
@@ -52,6 +53,10 @@ struct cell_connection {
         source(std::move(src)), dest(std::move(dst)), weight(w), delay(d) {}
 };
 
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cell_connection,
+    (a.source, a.dest, a.weight, a.delay),
+    (b.source, b.dest, b.weight, b.delay))
+
 struct gap_junction_connection {
     cell_global_label_type peer;
     cell_local_label_type local;
@@ -60,6 +65,10 @@ struct gap_junction_connection {
     gap_junction_connection(cell_global_label_type peer, cell_local_label_type local, double g):
         peer(std::move(peer)), local(std::move(local)), weight(g) {}
 };
+
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(gap_junction_connection,
+    (a.peer, a.local, a.weight),
+    (b.peer, b.local, b.weight))
 
 struct ARB_ARBOR_API has_gap_junctions {
     virtual std::vector<gap_junction_connection> gap_junctions_on(cell_gid_type) const {

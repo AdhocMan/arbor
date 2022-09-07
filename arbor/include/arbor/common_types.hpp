@@ -97,8 +97,21 @@ struct cell_global_label_type {
     cell_global_label_type(cell_gid_type gid, cell_tag_type tag, lid_selection_policy policy): gid(gid), label(std::move(tag), policy) {}
 };
 
-ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cell_member_type,(a.gid,a.index),(b.gid,b.index))
-ARB_DEFINE_LEXICOGRAPHIC_ORDERING(lid_range,(a.begin, a.end),(b.begin,b.end))
+
+struct cell_global_range_label_type {
+    cell_gid_type begin, end;
+    cell_local_label_type label;
+
+    cell_global_range_label_type (cell_gid_type begin, cell_gid_type end, cell_local_label_type label): begin(begin), end(end), label(std::move(label)) {}
+    cell_global_range_label_type (cell_gid_type begin, cell_gid_type end, cell_tag_type tag): begin(begin), end(end), label(std::move(tag)) {}
+    cell_global_range_label_type (cell_gid_type begin, cell_gid_type end, cell_tag_type tag, lid_selection_policy policy): begin(begin), end(end), label(std::move(tag), policy) {}
+};
+
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cell_member_type,(a.gid, a.index),(b.gid, b.index))
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(lid_range,(a.begin, a.end),(b.begin, b.end))
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cell_local_label_type,(a.tag, a.policy),(b.tag, b.policy))
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cell_global_label_type, (a.gid, a.label), (b.gid, b.label))
+ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cell_global_range_label_type,(a.begin, a.end, a.label),(b.begin, b.end, b.label))
 
 // For storing time values [ms]
 

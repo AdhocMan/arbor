@@ -44,6 +44,7 @@ set(arbor_sources
     morph/region.cpp
     morph/segment_tree.cpp
     morph/stitch.cpp
+    network.cpp
     merge_events.cpp
     simulation.cpp
     partition_load_balance.cpp

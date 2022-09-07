@@ -101,6 +101,49 @@ void register_identifiers(py::module& m) {
 
     py::implicitly_convertible<py::tuple, arb::cell_global_label_type>();
 
+    py::class_<arb::cell_global_range_label_type> cell_global_range_label_type(m, "cell_global_range_label",
+        "For global identification of a range items.\n\n"
+        "cell_global_range_label members:\n"
+        "(1) the first global identifier of the range of cells [begin, end).\n"
+        "(2) the past-the-end global identifier of the range of cells [begin, end).\n"
+        "(3) a cell_local_label, referring to a labeled group of items on the cell and a policy for selecting a single item out of the group.\n");
+
+    cell_global_range_label_type
+        .def(py::init(
+            [](arb::cell_gid_type begin, arb::cell_gid_type end, arb::cell_tag_type label) {
+              return arb::cell_global_range_label_type{begin, end, std::move(label)};
+            }),
+             "begin"_a, "end"_a, "label"_a,
+             "Construct a cell_global_range_label_type identifier with [begin, end) global indices and a label argument identifying a item on a range of cells.\n"
+             "The default round_robin policy is used for selecting one of possibly multiple items on the cell associated with the label.")
+        .def(py::init(
+            [](arb::cell_gid_type begin, arb::cell_gid_type end, arb::cell_local_label_type label) {
+              return arb::cell_global_range_label_type{begin, end, label};
+            }),
+             "begin"_a, "end"_a, "label"_a,
+             "Construct a cell_global_label identifier with arguments:\n"
+             "  begin:   The first global identifier of the range of cells [begin, end).\n"
+             "  end:   The past-the-end global identifier of the range of cells [begin, end).\n"
+             "  label: The cell_local_label representing the label and selection policy of an item on the cell.\n")
+        .def(py::init([](py::tuple t) {
+               if (py::len(t)!=3) throw std::runtime_error("tuple length != 3");
+               return arb::cell_global_range_label_type{t[0].cast<arb::cell_gid_type>(), t[1].cast<arb::cell_gid_type>(), t[2].cast<arb::cell_local_label_type>()};
+             }),
+             "Construct a cell_global_label identifier with tuple argument (begin, end, label):\n"
+             "  begin:   The first global identifier of the range of cells [begin, end).\n"
+             "  end:   The past-the-end global identifier of the range of cells [begin, end).\n"
+             "  label: The cell_local_label representing the label and selection policy of an item on the cell.\n")
+        .def_readwrite("begin",  &arb::cell_global_range_label_type::begin,
+             "The first global identifier of the range of cells [begin, end).")
+        .def_readwrite("end",  &arb::cell_global_range_label_type::end,
+             "The past-the-end global identifier of the range of cells [begin, end).")
+        .def_readwrite("label", &arb::cell_global_range_label_type::label,
+             "The cell_local_label representing the label and selection policy of an item on the cell.")
+        .def("__str__", [](arb::cell_global_range_label_type m) {return pprintf("<arbor.cell_global_range_label: begin {}, end {}, label ({}, {})>", m.begin, m.end, m.label.tag, m.label.policy);})
+        .def("__repr__",[](arb::cell_global_range_label_type m) {return pprintf("<arbor.cell_global_range_label: begin {}, end {}, label ({}, {})>", m.begin, m.end, m.label.tag, m.label.policy);});
+
+    py::implicitly_convertible<py::tuple, arb::cell_global_range_label_type>();
+
     py::class_<arb::cell_member_type> cell_member(m, "cell_member",
         "For global identification of a cell-local item.\n\n"
         "Items of cell_member must:\n"
