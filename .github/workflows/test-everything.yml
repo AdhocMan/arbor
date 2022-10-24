@@ -50,7 +50,7 @@ jobs:
             cxx:   "g++-11",
             py:    "3.10",
             cmake: "3.19.x",
-            mpi:   "ON",
+            mpi:   "OFF",
             simd:  "OFF"
           }
         - {
@@ -70,7 +70,7 @@ jobs:
             cxx:   "clang++-14",
             py:    "3.10",
             cmake: "3.19.x",
-            mpi:   "ON",
+            mpi:   "OFF",
             simd:  "OFF"
           }
         # - {
