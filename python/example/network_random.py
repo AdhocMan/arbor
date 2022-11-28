@@ -70,6 +70,7 @@ def make_cable_cell(gid):
 
     return arbor.cable_cell(tree, decor, labels)
 
+
 # Custom network selection
 class ring_selection:
     def __init__(self, ncells):
@@ -82,6 +83,7 @@ class ring_selection:
 
         return False
 
+
 # (5) Create a recipe that generates a network of connected cells.
 class random_ring_recipe(arbor.recipe):
     def __init__(self, ncells):
@@ -91,7 +93,9 @@ class random_ring_recipe(arbor.recipe):
         self.ncells = ncells
         self.props = arbor.neuron_cable_properties()
 
-        w = arbor.network_value.uniform_random(84, [0.01, 0.02])  # Random between 0.01 and 0.02 μS on expsyn
+        w = arbor.network_value.uniform_random(
+            84, [0.01, 0.02]
+        )  # Random between 0.01 and 0.02 μS on expsyn
         d = 5  # ms delay
         src_pop = [arbor.cell_global_range_label(0, ncells, "detector")]
         dest_pop = [arbor.cell_global_range_label(0, ncells, "syn")]
@@ -103,7 +107,9 @@ class random_ring_recipe(arbor.recipe):
             | arbor.network_selection.custom(ring_selection(ncells))
         )
 
-        self.connection_network = arbor.cell_connection_network(w, d, selection, src_pop, dest_pop)
+        self.connection_network = arbor.cell_connection_network(
+            w, d, selection, src_pop, dest_pop
+        )
 
     # (6) The num_cells method that returns the total number of cells in the model
     # must be implemented.
