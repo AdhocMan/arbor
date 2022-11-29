@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <cstdint>
 
 #include "util/strprintf.hpp"
 
@@ -24,27 +25,36 @@ namespace {
 enum class network_seed : unsigned { value = 48202, selection = 2058443 };
 
 // We only need minimal hash collisions and good spread over the hash range, because this will be
-// used as input for random123, which then provides all desired hash properties
-template <typename T, typename F>
-std::size_t simple_pair_hash(const T& a, const F& b) {
-    const auto hash_a = std::hash<T>()(a);
-    const auto hash_b = std::hash<F>()(b);
+// used as input for random123, which then provides all desired hash properties.
+// std::hash is implementation dependent, so we define our own for reproducibility.
 
+std::uint64_t simple_string_hash(const std::string& s) {
+    // use fnv1a hash algorithm
+    constexpr std::uint64_t prime = 1099511628211ull;
+    std::uint64_t h = 14695981039346656037ull;
+
+    for (auto c: s) {
+        h ^= c;
+        h *= prime;
+    }
+
+    return h;
+}
+
+std::uint64_t combine_hash_pair(std::uint64_t a, std::uint64_t b) {
     // Use golden ration hashing
-    if constexpr (sizeof(std::size_t) >= 8) {
-        constexpr std::size_t golden_ratio = 11400714819323198485llu;
-        return hash_a * golden_ratio + hash_b;
-    }
-    else {
-        constexpr std::size_t golden_ratio = 2654435769;
-        return hash_a * golden_ratio + hash_b;
-    }
+    constexpr std::uint64_t golden_ratio = 11400714819323198485llu;
+    return a * golden_ratio + b;
+}
+
+std::uint64_t hash_global_tag(cell_gid_type gid, const std::string& tag) {
+    return combine_hash_pair(gid, simple_string_hash(tag));
 }
 
 double uniform_rand_from_key_pair(std::array<unsigned, 2> seed,
-    std::size_t key_a,
-    std::size_t key_b) {
-    using rand_type = r123::Threefry4x64;
+    std::uint64_t key_a,
+    std::uint64_t key_b) {
+    using rand_type = r123::Threefry2x64;
     const rand_type::ctr_type seed_input = {{seed[0], seed[1]}};
 
     const rand_type::key_type key = {{std::min(key_a, key_b), std::max(key_a, key_b)}};
@@ -102,8 +112,8 @@ struct network_selection::bernoulli_random_impl: public selection_impl {
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label) const override {
         return uniform_rand_from_key_pair({unsigned(network_seed::selection), seed},
-                   simple_pair_hash(src_gid, src_label.tag),
-                   simple_pair_hash(dest_gid, dest_label.tag)) < p;
+                   hash_global_tag(src_gid, src_label.tag),
+                   hash_global_tag(dest_gid, dest_label.tag)) < p;
     }
 };
 
@@ -274,8 +284,8 @@ struct network_value::uniform_random_impl: public value_impl {
 
         // random number between 0 and 1
         const auto rand_num = uniform_rand_from_key_pair({unsigned(network_seed::value), seed},
-            simple_pair_hash(src_gid, src_label.tag),
-            simple_pair_hash(dest_gid, dest_label.tag));
+            hash_global_tag(src_gid, src_label.tag),
+            hash_global_tag(dest_gid, dest_label.tag));
 
         return (range[1] - range[0]) * rand_num + range[0];
     }
