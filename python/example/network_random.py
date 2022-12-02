@@ -93,7 +93,7 @@ class random_ring_recipe(arbor.recipe):
         self.ncells = ncells
         self.props = arbor.neuron_cable_properties()
 
-        w = arbor.network_value.uniform_random(
+        w = arbor.network_value.uniform_distribution(
             84, [0.01, 0.02]
         )  # Random between 0.01 and 0.02 μS on expsyn
         d = 5  # ms delay

@@ -562,11 +562,11 @@ TEST(network_selection, xor) {
     EXPECT_FALSE((false_selection ^ false_selection)(gl, gl));
 }
 
-TEST(network_value, uniform_random) {
+TEST(network_value, uniform_distribution) {
     const network_population src_pop = {{0, 5, "a"}, {7, 15, "b"}, {20, 150, "c"}};
     const network_population dest_pop = {{3, 6, "d"}, {13, 50, "e"}};
 
-    auto v = network_value::uniform_random(42, {-5.0, 3.0});
+    auto v = network_value::uniform_distribution(42, {-5.0, 3.0});
     double mean = 0.0;
     std::size_t count = 0;
     for (const auto& src: src_pop) {
@@ -585,11 +585,11 @@ TEST(network_value, uniform_random) {
     EXPECT_NEAR(mean, -1.0, 1e-2);
 }
 
-TEST(network_value, uniform_random_consistency) {
+TEST(network_value, uniform_distribution_consistency) {
     const network_population src_pop = {{0, 5, "a"}, {7, 15, "b"}, {20, 150, "c"}};
     const network_population dest_pop = {{3, 6, "d"}, {13, 50, "e"}};
 
-    auto v = network_value::uniform_random(42, {2.0, 5.0});
+    auto v = network_value::uniform_distribution(42, {2.0, 5.0});
     for (const auto& src: src_pop) {
         for (const auto& dest: dest_pop) {
             for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
@@ -604,7 +604,7 @@ TEST(network_value, uniform_random_consistency) {
     }
 }
 
-TEST(network_value, uniform_random_reproducibility) {
+TEST(network_value, uniform_distribution_reproducibility) {
     const network_population src_pop = {{0, 4, "a"}, {12, 14, "b"}};
     const network_population dest_pop = {{2, 5, "d"}, {13, 15, "e"}};
 
@@ -640,7 +640,7 @@ TEST(network_value, uniform_random_reproducibility) {
     results[{13, "b"}][{13, "e"}] = 0.48435615;
     results[{13, "b"}][{14, "e"}] = 0.55361571;
 
-    auto v = network_value::uniform_random(42, {0.0, 1.0});
+    auto v = network_value::uniform_distribution(42, {0.0, 1.0});
     for (const auto& src: src_pop) {
         for (const auto& dest: dest_pop) {
             for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
@@ -656,15 +656,14 @@ TEST(network_value, uniform_random_reproducibility) {
     }
 }
 
-
-TEST(network_value, normal_random) {
+TEST(network_value, normal_distribution) {
     const network_population src_pop = {{0, 100, "a"}, {100, 500, "b"}};
     const network_population dest_pop = {{0, 500, "d"}};
 
     const double mean = 5.0;
     const double std_dev = 3.0;
 
-    auto v = network_value::normal_random(42, mean, std_dev);
+    auto v = network_value::normal_distribution(42, mean, std_dev);
 
     double sample_mean = 0.0;
     double sample_dev = 0.0;
@@ -689,7 +688,7 @@ TEST(network_value, normal_random) {
     EXPECT_NEAR(sample_dev, std_dev, 1e-2);
 }
 
-TEST(network_value, normal_random_reproducibility) {
+TEST(network_value, normal_distribution_reproducibility) {
     const network_population src_pop = {{0, 4, "a"}, {12, 14, "b"}};
     const network_population dest_pop = {{2, 5, "d"}, {13, 15, "e"}};
 
@@ -728,7 +727,7 @@ TEST(network_value, normal_random_reproducibility) {
     const double mean = 5.0;
     const double std_dev = 3.0;
 
-    auto v = network_value::normal_random(42, mean, std_dev);
+    auto v = network_value::normal_distribution(42, mean, std_dev);
     for (const auto& src: src_pop) {
         for (const auto& dest: dest_pop) {
             for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {

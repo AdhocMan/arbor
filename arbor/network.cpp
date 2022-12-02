@@ -284,11 +284,13 @@ network_selection network_selection::operator^(network_selection right) const {
         std::shared_ptr<selection_impl>(new network_selection::xor_impl(*this, std::move(right)))};
 }
 
-struct network_value::uniform_random_impl: public value_impl {
+struct network_value::uniform_distribution_impl: public value_impl {
     unsigned seed = 0;
     std::array<double, 2> range;
 
-    uniform_random_impl(unsigned rand_seed, std::array<double, 2> r): seed(rand_seed), range(r) {}
+    uniform_distribution_impl(unsigned rand_seed, std::array<double, 2> r):
+        seed(rand_seed),
+        range(r) {}
 
     double get(cell_gid_type src_gid,
         const cell_local_label_type& src_label,
@@ -305,12 +307,12 @@ struct network_value::uniform_random_impl: public value_impl {
     }
 };
 
-struct network_value::normal_random_impl: public value_impl {
+struct network_value::normal_distribution_impl: public value_impl {
     unsigned seed = 0;
     double mean = 0.0;
     double std_deviation = 1.0;
 
-    normal_random_impl(unsigned rand_seed, double mean_, double std_deviation_):
+    normal_distribution_impl(unsigned rand_seed, double mean_, double std_deviation_):
         seed(rand_seed),
         mean(mean_),
         std_deviation(std_deviation_) {}
@@ -358,12 +360,12 @@ network_value::network_value(double value): network_value(network_value::uniform
 
 network_value::network_value(std::shared_ptr<value_impl> impl): impl_(std::move(impl)) {}
 
-network_value network_value::uniform_random(unsigned seed, std::array<double, 2> range) {
-    return {std::shared_ptr<value_impl>(new uniform_random_impl(seed, range))};
+network_value network_value::uniform_distribution(unsigned seed, std::array<double, 2> range) {
+    return {std::shared_ptr<value_impl>(new uniform_distribution_impl(seed, range))};
 }
 
-network_value network_value::normal_random(unsigned seed, double mean, double std_deviation) {
-    return {std::shared_ptr<value_impl>(new normal_random_impl(seed, mean, std_deviation))};
+network_value network_value::normal_distribution(unsigned seed, double mean, double std_deviation) {
+    return {std::shared_ptr<value_impl>(new normal_distribution_impl(seed, mean, std_deviation))};
 }
 
 network_value network_value::custom(

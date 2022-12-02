@@ -65,8 +65,7 @@ public:
     network_selection operator^(network_selection right) const;
 
     // Returns true if a connection between src and dest is selected.
-    inline bool operator()(
-        const cell_global_label_type& src,
+    inline bool operator()(const cell_global_label_type& src,
         const cell_global_label_type& dest) const {
         return impl_->select(src.gid, src.label, dest.gid, dest.label);
     }
@@ -114,12 +113,12 @@ public:
 
     // Uniform random value in (range[0], range[1]]. Always returns the same value for repeated
     // calls with the same arguments and calls are symmetric v(a, b) = v(b, a).
-    static network_value uniform_random(unsigned seed, std::array<double, 2> range);
+    static network_value uniform_distribution(unsigned seed, std::array<double, 2> range);
 
     // Radom value from a normal distribution with given mean and standard deviation. Always returns
     // the same value for repeated calls with the same arguments and calls are symmetric v(a, b) =
     // v(b, a).
-    static network_value normal_random(unsigned seed, double mean, double std_deviation);
+    static network_value normal_distribution(unsigned seed, double mean, double std_deviation);
 
     // Custom value using the provided function "func". Repeated calls with the same arguments
     // to "func" must yield the same result. For gap junction values,
@@ -131,8 +130,7 @@ public:
     static network_value uniform(double value);
 
     // Returns the value for a connection between src and dest.
-    inline double operator()(
-        const cell_global_label_type& src,
+    inline double operator()(const cell_global_label_type& src,
         const cell_global_label_type& dest) const {
         return impl_->get(src.gid, src.label, dest.gid, dest.label);
     }
@@ -150,8 +148,8 @@ private:
         virtual ~value_impl() = default;
     };
 
-    struct uniform_random_impl;
-    struct normal_random_impl;
+    struct uniform_distribution_impl;
+    struct normal_distribution_impl;
     struct custom_impl;
     struct uniform_impl;
 
@@ -221,6 +219,5 @@ private:
     network_population src_pop_;
     network_population dest_pop_;
 };
-
 
 }  // namespace arb

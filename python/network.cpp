@@ -70,12 +70,20 @@ void register_network(py::module& m) {
         m, "network_value", "Provides a floating point value for a given connection");
 
     network_value.def(py::init([](double value) { return arb::network_value(value); }), "value"_a)
-        .def_static("uniform_random",
-            &arb::network_value::uniform_random,
+        .def_static("uniform_distribution",
+            &arb::network_value::uniform_distribution,
             "seed"_a,
             "range"_a,
             "Uniform random value in (range[0], range[1]]. Always returns the same value for "
             "repeated  calls with the same arguments and calls are symmetric v(a, b) = v(b, a).")
+        .def_static("normal_distribution",
+            &arb::network_value::normal_distribution,
+            "seed"_a,
+            "mean"_a,
+            "std_deviation"_a,
+            "Radom value from a normal distribution with given mean and standard deviation. "
+            "Always returns the same value for repeated calls with the same arguments and calls "
+            "are symmetric v(a, b) = v(b, a).")
         .def_static("custom",
             &arb::network_value::custom,
             "func"_a,
