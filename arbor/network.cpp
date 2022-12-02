@@ -11,6 +11,7 @@
 #include <utility>
 #include <cstdint>
 
+#include "Random123/boxmuller.hpp"
 #include "util/strprintf.hpp"
 
 #include <Random123/threefry.h>
@@ -61,6 +62,19 @@ double uniform_rand_from_key_pair(std::array<unsigned, 2> seed,
     rand_type gen;
     return r123::u01<double>(gen(seed_input, key)[0]);
 }
+
+double normal_rand_from_key_pair(std::array<unsigned, 2> seed,
+    std::uint64_t key_a,
+    std::uint64_t key_b) {
+    using rand_type = r123::Threefry2x64;
+    const rand_type::ctr_type seed_input = {{seed[0], seed[1]}};
+
+    const rand_type::key_type key = {{std::min(key_a, key_b), std::max(key_a, key_b)}};
+    rand_type gen;
+    const auto rand_num = gen(seed_input, key);
+    return r123::boxmuller(rand_num[0], rand_num[1]).x;
+}
+
 }  // namespace
 
 ARB_ARBOR_API network_population unique(const network_population& pop) {
@@ -291,6 +305,27 @@ struct network_value::uniform_random_impl: public value_impl {
     }
 };
 
+struct network_value::normal_random_impl: public value_impl {
+    unsigned seed = 0;
+    double mean = 0.0;
+    double std_deviation = 1.0;
+
+    normal_random_impl(unsigned rand_seed, double mean_, double std_deviation_):
+        seed(rand_seed),
+        mean(mean_),
+        std_deviation(std_deviation_) {}
+
+    double get(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label) const override {
+        return mean +
+               std_deviation * normal_rand_from_key_pair({unsigned(network_seed::value), seed},
+                                   hash_global_tag(src_gid, src_label.tag),
+                                   hash_global_tag(dest_gid, dest_label.tag));
+    }
+};
+
 struct network_value::custom_impl: public value_impl {
     std::function<double(const cell_global_label_type&, const cell_global_label_type&)> func;
 
@@ -325,6 +360,10 @@ network_value::network_value(std::shared_ptr<value_impl> impl): impl_(std::move(
 
 network_value network_value::uniform_random(unsigned seed, std::array<double, 2> range) {
     return {std::shared_ptr<value_impl>(new uniform_random_impl(seed, range))};
+}
+
+network_value network_value::normal_random(unsigned seed, double mean, double std_deviation) {
+    return {std::shared_ptr<value_impl>(new normal_random_impl(seed, mean, std_deviation))};
 }
 
 network_value network_value::custom(

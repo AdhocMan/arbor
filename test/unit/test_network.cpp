@@ -567,17 +567,22 @@ TEST(network_value, uniform_random) {
     const network_population dest_pop = {{3, 6, "d"}, {13, 50, "e"}};
 
     auto v = network_value::uniform_random(42, {-5.0, 3.0});
+    double mean = 0.0;
+    std::size_t count = 0;
     for (const auto& src: src_pop) {
         for (const auto& dest: dest_pop) {
             for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
-                for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid) {
+                for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid, ++count) {
                     const auto result = v({src_gid, src.label}, {dest_gid, dest.label});
+                    mean += result;
                     EXPECT_LE(result, 3.0);
                     EXPECT_GT(result, -5.0);
                 }
             }
         }
     }
+    mean /= count;
+    EXPECT_NEAR(mean, -1.0, 1e-2);
 }
 
 TEST(network_value, uniform_random_consistency) {
@@ -642,6 +647,95 @@ TEST(network_value, uniform_random_reproducibility) {
                 for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid) {
                     const auto src_gl = cell_global_label_type(src_gid, src.label);
                     const auto dest_gl = cell_global_label_type(dest_gid, dest.label);
+                    ASSERT_TRUE(results.count(src_gl));
+                    ASSERT_TRUE(results[src_gl].count(dest_gl));
+                    EXPECT_NEAR(v(src_gl, dest_gl), results[src_gl][dest_gl], 1e-7);
+                }
+            }
+        }
+    }
+}
+
+
+TEST(network_value, normal_random) {
+    const network_population src_pop = {{0, 100, "a"}, {100, 500, "b"}};
+    const network_population dest_pop = {{0, 500, "d"}};
+
+    const double mean = 5.0;
+    const double std_dev = 3.0;
+
+    auto v = network_value::normal_random(42, mean, std_dev);
+
+    double sample_mean = 0.0;
+    double sample_dev = 0.0;
+
+    std::size_t count = 0;
+    for (const auto& src: src_pop) {
+        for (const auto& dest: dest_pop) {
+            for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
+                for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid, ++count) {
+                    const auto result = v({src_gid, src.label}, {dest_gid, dest.label});
+                    sample_mean += result;
+                    sample_dev += (result - mean) * (result - mean);
+                }
+            }
+        }
+    }
+
+    sample_mean /= count;
+    sample_dev = std::sqrt(sample_dev / count);
+
+    EXPECT_NEAR(sample_mean, mean, 1e-2);
+    EXPECT_NEAR(sample_dev, std_dev, 1e-2);
+}
+
+TEST(network_value, normal_random_reproducibility) {
+    const network_population src_pop = {{0, 4, "a"}, {12, 14, "b"}};
+    const network_population dest_pop = {{2, 5, "d"}, {13, 15, "e"}};
+
+    std::map<cell_global_label_type, std::map<cell_global_label_type, double>> results;
+    results[{0, "a"}][{2, "d"}] = 5.22844040;
+    results[{0, "a"}][{3, "d"}] = 12.11075575;
+    results[{0, "a"}][{4, "d"}] = 1.79567588;
+    results[{1, "a"}][{2, "d"}] = 6.40208047;
+    results[{1, "a"}][{3, "d"}] = 8.88639034;
+    results[{1, "a"}][{4, "d"}] = 5.66168005;
+    results[{2, "a"}][{2, "d"}] = 4.71464577;
+    results[{2, "a"}][{3, "d"}] = 3.09002168;
+    results[{2, "a"}][{4, "d"}] = 8.42688714;
+    results[{3, "a"}][{2, "d"}] = 2.81869263;
+    results[{3, "a"}][{3, "d"}] = 0.88072245;
+    results[{3, "a"}][{4, "d"}] = 11.86901555;
+    results[{0, "a"}][{13, "e"}] = 9.06395119;
+    results[{0, "a"}][{14, "e"}] = 4.45229310;
+    results[{1, "a"}][{13, "e"}] = 4.61727001;
+    results[{1, "a"}][{14, "e"}] = 6.82659744;
+    results[{2, "a"}][{13, "e"}] = 1.77223483;
+    results[{2, "a"}][{14, "e"}] = 12.92401473;
+    results[{3, "a"}][{13, "e"}] = 5.56840067;
+    results[{3, "a"}][{14, "e"}] = 6.97205634;
+    results[{12, "b"}][{2, "d"}] = 6.15835914;
+    results[{12, "b"}][{3, "d"}] = 1.41352179;
+    results[{12, "b"}][{4, "d"}] = 5.24003553;
+    results[{13, "b"}][{2, "d"}] = 7.19132905;
+    results[{13, "b"}][{3, "d"}] = 5.20244979;
+    results[{13, "b"}][{4, "d"}] = 5.53694682;
+    results[{12, "b"}][{13, "e"}] = 6.58797260;
+    results[{12, "b"}][{14, "e"}] = -0.74208974;
+    results[{13, "b"}][{13, "e"}] = 5.13288963;
+    results[{13, "b"}][{14, "e"}] = 4.84014301;
+
+    const double mean = 5.0;
+    const double std_dev = 3.0;
+
+    auto v = network_value::normal_random(42, mean, std_dev);
+    for (const auto& src: src_pop) {
+        for (const auto& dest: dest_pop) {
+            for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
+                for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid) {
+                    const auto src_gl = cell_global_label_type(src_gid, src.label);
+                    const auto dest_gl = cell_global_label_type(dest_gid, dest.label);
+
                     ASSERT_TRUE(results.count(src_gl));
                     ASSERT_TRUE(results[src_gl].count(dest_gl));
                     EXPECT_NEAR(v(src_gl, dest_gl), results[src_gl][dest_gl], 1e-7);

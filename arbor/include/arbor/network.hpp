@@ -116,6 +116,11 @@ public:
     // calls with the same arguments and calls are symmetric v(a, b) = v(b, a).
     static network_value uniform_random(unsigned seed, std::array<double, 2> range);
 
+    // Radom value from a normal distribution with given mean and standard deviation. Always returns
+    // the same value for repeated calls with the same arguments and calls are symmetric v(a, b) =
+    // v(b, a).
+    static network_value normal_random(unsigned seed, double mean, double std_deviation);
+
     // Custom value using the provided function "func". Repeated calls with the same arguments
     // to "func" must yield the same result. For gap junction values,
     // "func" must be symmetric (func(a,b) = func(b,a)).
@@ -146,6 +151,7 @@ private:
     };
 
     struct uniform_random_impl;
+    struct normal_random_impl;
     struct custom_impl;
     struct uniform_impl;
 
