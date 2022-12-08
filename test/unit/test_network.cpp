@@ -693,36 +693,36 @@ TEST(network_value, normal_distribution_reproducibility) {
     const network_population dest_pop = {{2, 5, "d"}, {13, 15, "e"}};
 
     std::map<cell_global_label_type, std::map<cell_global_label_type, double>> results;
-    results[{0, "a"}][{2, "d"}] = 5.22844040;
-    results[{0, "a"}][{3, "d"}] = 12.11075575;
-    results[{0, "a"}][{4, "d"}] = 1.79567588;
-    results[{1, "a"}][{2, "d"}] = 6.40208047;
-    results[{1, "a"}][{3, "d"}] = 8.88639034;
-    results[{1, "a"}][{4, "d"}] = 5.66168005;
-    results[{2, "a"}][{2, "d"}] = 4.71464577;
-    results[{2, "a"}][{3, "d"}] = 3.09002168;
-    results[{2, "a"}][{4, "d"}] = 8.42688714;
-    results[{3, "a"}][{2, "d"}] = 2.81869263;
-    results[{3, "a"}][{3, "d"}] = 0.88072245;
-    results[{3, "a"}][{4, "d"}] = 11.86901555;
-    results[{0, "a"}][{13, "e"}] = 9.06395119;
-    results[{0, "a"}][{14, "e"}] = 4.45229310;
-    results[{1, "a"}][{13, "e"}] = 4.61727001;
-    results[{1, "a"}][{14, "e"}] = 6.82659744;
-    results[{2, "a"}][{13, "e"}] = 1.77223483;
-    results[{2, "a"}][{14, "e"}] = 12.92401473;
-    results[{3, "a"}][{13, "e"}] = 5.56840067;
-    results[{3, "a"}][{14, "e"}] = 6.97205634;
-    results[{12, "b"}][{2, "d"}] = 6.15835914;
-    results[{12, "b"}][{3, "d"}] = 1.41352179;
-    results[{12, "b"}][{4, "d"}] = 5.24003553;
-    results[{13, "b"}][{2, "d"}] = 7.19132905;
-    results[{13, "b"}][{3, "d"}] = 5.20244979;
-    results[{13, "b"}][{4, "d"}] = 5.53694682;
-    results[{12, "b"}][{13, "e"}] = 6.58797260;
-    results[{12, "b"}][{14, "e"}] = -0.74208974;
-    results[{13, "b"}][{13, "e"}] = 5.13288963;
-    results[{13, "b"}][{14, "e"}] = 4.84014301;
+    results[{0, "a"}][{2, "d"}] = 0.08772826;
+    results[{0, "a"}][{3, "d"}] = 9.67308342;
+    results[{0, "a"}][{4, "d"}] = 3.73949064;
+    results[{1, "a"}][{2, "d"}] = -0.56031250;
+    results[{1, "a"}][{3, "d"}] = 2.37198282;
+    results[{1, "a"}][{4, "d"}] = 6.14574844;
+    results[{2, "a"}][{2, "d"}] = -1.51583318;
+    results[{2, "a"}][{3, "d"}] = 7.05109701;
+    results[{2, "a"}][{4, "d"}] = 2.35098292;
+    results[{3, "a"}][{2, "d"}] = 5.55626489;
+    results[{3, "a"}][{3, "d"}] = 8.07950315;
+    results[{3, "a"}][{4, "d"}] = 5.53472845;
+    results[{0, "a"}][{13, "e"}] = 4.72865713;
+    results[{0, "a"}][{14, "e"}] = 5.91688185;
+    results[{1, "a"}][{13, "e"}] = 10.81253890;
+    results[{1, "a"}][{14, "e"}] = 8.86701434;
+    results[{2, "a"}][{13, "e"}] = 1.16593915;
+    results[{2, "a"}][{14, "e"}] = 5.09421785;
+    results[{3, "a"}][{13, "e"}] = 4.76063628;
+    results[{3, "a"}][{14, "e"}] = 1.69353474;
+    results[{12, "b"}][{2, "d"}] = 4.76564698;
+    results[{12, "b"}][{3, "d"}] = 5.81550403;
+    results[{12, "b"}][{4, "d"}] = 13.99375691;
+    results[{13, "b"}][{2, "d"}] = 6.03529503;
+    results[{13, "b"}][{3, "d"}] = 1.96907188;
+    results[{13, "b"}][{4, "d"}] = 5.38927382;
+    results[{12, "b"}][{13, "e"}] = 5.89951548;
+    results[{12, "b"}][{14, "e"}] = 3.33922968;
+    results[{13, "b"}][{13, "e"}] = 12.49977574;
+    results[{13, "b"}][{14, "e"}] = 3.97665339;
 
     const double mean = 5.0;
     const double std_dev = 3.0;
@@ -743,6 +743,98 @@ TEST(network_value, normal_distribution_reproducibility) {
         }
     }
 }
+
+TEST(network_value, truncated_normal_distribution) {
+    const network_population src_pop = {{0, 100, "a"}, {100, 500, "b"}};
+    const network_population dest_pop = {{0, 500, "d"}};
+
+    const double mean = 5.0;
+    const double std_dev = 3.0;
+    const double lower_bound = 1.0;
+    const double upper_bound = 9.0;
+
+    auto v =
+        network_value::truncated_normal_distribution(42, mean, std_dev, {lower_bound, upper_bound});
+
+    double sample_mean = 0.0;
+
+    std::size_t count = 0;
+    for (const auto& src: src_pop) {
+        for (const auto& dest: dest_pop) {
+            for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
+                for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid, ++count) {
+                    const auto result = v({src_gid, src.label}, {dest_gid, dest.label});
+                    EXPECT_GT(result, lower_bound);
+                    EXPECT_LE(result, upper_bound);
+                    sample_mean += result;
+                }
+            }
+        }
+    }
+
+    sample_mean /= count;
+
+    EXPECT_NEAR(sample_mean, mean, 1e-2);
+}
+
+TEST(network_value, truncated_normal_distribution_reproducibility) {
+    const network_population src_pop = {{0, 4, "a"}, {12, 14, "b"}};
+    const network_population dest_pop = {{2, 5, "d"}, {13, 15, "e"}};
+
+    std::map<cell_global_label_type, std::map<cell_global_label_type, double>> results;
+    results[{0, "a"}][{2, "d"}] = 6.75583032;
+    results[{0, "a"}][{3, "d"}] = 4.45202654;
+    results[{0, "a"}][{4, "d"}] = 7.94629345;
+    results[{1, "a"}][{2, "d"}] = 5.38361275;
+    results[{1, "a"}][{3, "d"}] = 4.66503239;
+    results[{1, "a"}][{4, "d"}] = 5.52403259;
+    results[{2, "a"}][{2, "d"}] = 3.61250351;
+    results[{2, "a"}][{3, "d"}] = 6.23056041;
+    results[{2, "a"}][{4, "d"}] = 5.90644730;
+    results[{3, "a"}][{2, "d"}] = 6.14728960;
+    results[{3, "a"}][{3, "d"}] = 5.22867021;
+    results[{3, "a"}][{4, "d"}] = 4.42161676;
+    results[{0, "a"}][{13, "e"}] = 5.99341261;
+    results[{0, "a"}][{14, "e"}] = 3.37764114;
+    results[{1, "a"}][{13, "e"}] = 7.27707923;
+    results[{1, "a"}][{14, "e"}] = 4.00826224;
+    results[{2, "a"}][{13, "e"}] = 6.64256804;
+    results[{2, "a"}][{14, "e"}] = 5.20821494;
+    results[{3, "a"}][{13, "e"}] = 7.06933652;
+    results[{3, "a"}][{14, "e"}] = 5.91076864;
+    results[{12, "b"}][{2, "d"}] = 4.70123400;
+    results[{12, "b"}][{3, "d"}] = 4.80106583;
+    results[{12, "b"}][{4, "d"}] = 3.47787931;
+    results[{13, "b"}][{2, "d"}] = 4.64732400;
+    results[{13, "b"}][{3, "d"}] = 5.81092091;
+    results[{13, "b"}][{4, "d"}] = 3.49918183;
+    results[{12, "b"}][{13, "e"}] = 7.75582442;
+    results[{12, "b"}][{14, "e"}] = 4.20438519;
+    results[{13, "b"}][{13, "e"}] = 5.40959364;
+    results[{13, "b"}][{14, "e"}] = 5.16618053;
+
+    const double mean = 5.0;
+    const double std_dev = 3.0;
+
+    auto v =
+        network_value::truncated_normal_distribution(42, mean, std_dev, {mean - 2.0, mean + 3.0});
+    for (const auto& src: src_pop) {
+        for (const auto& dest: dest_pop) {
+            for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
+                for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid) {
+                    const auto src_gl = cell_global_label_type(src_gid, src.label);
+                    const auto dest_gl = cell_global_label_type(dest_gid, dest.label);
+
+                    ASSERT_TRUE(results.count(src_gl));
+                    ASSERT_TRUE(results[src_gl].count(dest_gl));
+                    EXPECT_NEAR(v(src_gl, dest_gl), results[src_gl][dest_gl], 1e-7);
+                }
+            }
+        }
+    }
+}
+
+
 
 TEST(network_value, custom) {
     const network_population src_pop = {{0, 5, "a"}, {7, 15, "b"}, {20, 150, "c"}};

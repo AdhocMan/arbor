@@ -23,7 +23,12 @@ namespace {
 
 // Partial seed to use for network_value and network_selection generation.
 // Different seed for each type to avoid unintentional correlation.
-enum class network_seed : unsigned { value = 48202, selection = 2058443 };
+enum class network_seed : unsigned {
+    selection_bernoulli = 2058443,
+    value_uniform = 48202,
+    value_normal = 8405,
+    value_truncated_normal = 380237
+};
 
 // We only need minimal hash collisions and good spread over the hash range, because this will be
 // used as input for random123, which then provides all desired hash properties.
@@ -125,7 +130,7 @@ struct network_selection::bernoulli_random_impl: public selection_impl {
         const cell_local_label_type& src_label,
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label) const override {
-        return uniform_rand_from_key_pair({unsigned(network_seed::selection), seed},
+        return uniform_rand_from_key_pair({unsigned(network_seed::selection_bernoulli), seed},
                    hash_global_tag(src_gid, src_label.tag),
                    hash_global_tag(dest_gid, dest_label.tag)) < p;
     }
@@ -288,9 +293,12 @@ struct network_value::uniform_distribution_impl: public value_impl {
     unsigned seed = 0;
     std::array<double, 2> range;
 
-    uniform_distribution_impl(unsigned rand_seed, std::array<double, 2> r):
+    uniform_distribution_impl(unsigned rand_seed, const std::array<double, 2>& r):
         seed(rand_seed),
-        range(r) {}
+        range(r) {
+        if (range[0] >= range[1])
+            throw std::invalid_argument("Uniform distribution: invalid range");
+    }
 
     double get(cell_gid_type src_gid,
         const cell_local_label_type& src_label,
@@ -299,9 +307,10 @@ struct network_value::uniform_distribution_impl: public value_impl {
         if (range[0] > range[1]) return range[1];
 
         // random number between 0 and 1
-        const auto rand_num = uniform_rand_from_key_pair({unsigned(network_seed::value), seed},
-            hash_global_tag(src_gid, src_label.tag),
-            hash_global_tag(dest_gid, dest_label.tag));
+        const auto rand_num =
+            uniform_rand_from_key_pair({unsigned(network_seed::value_uniform), seed},
+                hash_global_tag(src_gid, src_label.tag),
+                hash_global_tag(dest_gid, dest_label.tag));
 
         return (range[1] - range[0]) * rand_num + range[0];
     }
@@ -321,10 +330,51 @@ struct network_value::normal_distribution_impl: public value_impl {
         const cell_local_label_type& src_label,
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label) const override {
-        return mean +
-               std_deviation * normal_rand_from_key_pair({unsigned(network_seed::value), seed},
-                                   hash_global_tag(src_gid, src_label.tag),
-                                   hash_global_tag(dest_gid, dest_label.tag));
+        return mean + std_deviation *
+                          normal_rand_from_key_pair({unsigned(network_seed::value_normal), seed},
+                              hash_global_tag(src_gid, src_label.tag),
+                              hash_global_tag(dest_gid, dest_label.tag));
+    }
+};
+
+struct network_value::truncated_normal_distribution_impl: public value_impl {
+    unsigned seed = 0;
+    double mean = 0.0;
+    double std_deviation = 1.0;
+    std::array<double, 2> range;
+
+    truncated_normal_distribution_impl(unsigned rand_seed,
+        double mean_,
+        double std_deviation_,
+        const std::array<double, 2>& range_):
+        seed(rand_seed),
+        mean(mean_),
+        std_deviation(std_deviation_),
+        range(range_) {
+        if (range[0] >= range[1])
+            throw std::invalid_argument("Truncated normal distribution: invalid range");
+    }
+
+    double get(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label) const override {
+
+        const auto src_hash = hash_global_tag(src_gid, src_label.tag);
+        auto dest_hash = hash_global_tag(dest_gid, dest_label.tag);
+
+        double value = 0.0;
+
+        do {
+            value =
+                mean + std_deviation * normal_rand_from_key_pair(
+                                           {unsigned(network_seed::value_truncated_normal), seed},
+                                           src_hash,
+                                           dest_hash);
+            ++dest_hash;
+        } while (!(value > range[0] && value <= range[1]));
+
+        return value;
     }
 };
 
@@ -360,12 +410,21 @@ network_value::network_value(double value): network_value(network_value::uniform
 
 network_value::network_value(std::shared_ptr<value_impl> impl): impl_(std::move(impl)) {}
 
-network_value network_value::uniform_distribution(unsigned seed, std::array<double, 2> range) {
+network_value network_value::uniform_distribution(unsigned seed,
+    const std::array<double, 2>& range) {
     return {std::shared_ptr<value_impl>(new uniform_distribution_impl(seed, range))};
 }
 
 network_value network_value::normal_distribution(unsigned seed, double mean, double std_deviation) {
     return {std::shared_ptr<value_impl>(new normal_distribution_impl(seed, mean, std_deviation))};
+}
+
+network_value network_value::truncated_normal_distribution(unsigned seed,
+    double mean,
+    double std_deviation,
+    const std::array<double, 2>& range) {
+    return {std::shared_ptr<value_impl>(
+        new truncated_normal_distribution_impl(seed, mean, std_deviation, range))};
 }
 
 network_value network_value::custom(
@@ -376,6 +435,11 @@ network_value network_value::custom(
 network_value network_value::uniform(double value) {
     return {std::shared_ptr<value_impl>(new uniform_impl(value))};
 }
+
+cell_connection_network::cell_connection_network():
+    selection_(network_selection::none()),
+    weight_(0.0),
+    delay_(0.0) {}
 
 cell_connection_network::cell_connection_network(network_value weight,
     network_value delay,
@@ -415,6 +479,8 @@ std::vector<cell_connection> cell_connection_network::generate(cell_gid_type gid
 
     return connections;
 }
+
+gap_junction_network::gap_junction_network(): selection_(network_selection::none()), weight_(0.0) {}
 
 gap_junction_network::gap_junction_network(network_value weight,
     network_selection selection,
