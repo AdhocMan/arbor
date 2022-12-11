@@ -112,3 +112,167 @@ Interconnectivity
     .. attribute:: threshold
 
         Voltage threshold of threshold detector [mV]
+
+
+
+High-Level Network Description
+------------------------------
+
+
+.. py:function:: unique(pop: list[cell_global_range_label]) -> list[cell_global_range_label]
+
+    Removes any duplicate global labels contained by merging overlapping intervals for matching local labels.
+
+.. py:class:: network_selection
+
+    Selects or rejects a connection or gap junction when queried.
+
+    .. py:method:: bernoulli_random(seed: unsigned int, p: float) -> network_selection
+       :staticmethod:
+
+       Random selection using the bernoulli random distribution with given probability.
+
+    .. py:method:: custom(func) -> network_selection
+       :staticmethod:
+
+       A custom selection using the provided function ``func`` with signature ``(src: cell_global_label, dest: cell_global_label) -> bool``,
+       which must accept a ``src`` and ``dest`` ``cell_global_label`` and return true if the connection / gap junction should be generated,
+       and false otherwise. Repeated calls with the same arguments must give the same result. For gap junction, ``func`` must also be symmetric.
+
+    .. py:method:: all() -> network_selection
+       :staticmethod:
+
+       Select all connections / gap junctions.
+
+    .. py:method:: none() -> network_selection
+       :staticmethod:
+
+       Select no connections / gap junctions.
+
+    .. py:method:: invert(s: network_selection) -> network_selection
+       :staticmethod:
+
+       Invert the given selection, by accepting any connection not accepted by ``s`` and vice versa.
+
+    .. py:method:: inter_cell() -> network_selection
+       :staticmethod:
+
+       Select only connections / gap junctions between different cells.
+
+    .. py:method:: not_equal() -> network_selection
+       :staticmethod:
+
+       Select only connections / gap junctions between different items.
+       Items identified by a different local celll label on the same cell are selected.
+
+    .. py:method:: __call__(src: cell_global_label, dest: cell_global_label) -> bool
+       :noindex:
+
+       Accept or reject connection or gap junction between ``src`` and ``dest``.
+
+    .. py:method:: __and__(other: network_selection) -> network_selection
+
+       Logical "and" operation between two selections.
+
+    .. py:method:: __or__(other: network_selection) -> network_selection
+
+       Logical "or" operation between two selections.
+
+    .. py:method:: __xor__(other: network_selection) -> network_selection
+
+       Logical "xor" operation between two selections.
+
+
+.. py:class:: network_value
+
+    A value used in network generation.
+
+    .. py:method:: uniform_distribution(seed: unsigned int, range: [float, float]) -> network_value
+       :staticmethod:
+
+       Uniform random distribution defined on the half open interval (range[0], range[1]].
+
+    .. py:method:: normal_distribution(seed: unsigned int, mean: float, std_deviation: float) -> network_value
+       :staticmethod:
+
+       Normal random distribution with given mean and standard deviation.
+
+    .. py:method:: truncated_normal_distribution(seed: unsigned int, mean: float, std_deviation: float, range: [float, float]) -> network_value
+       :staticmethod:
+
+       Truncated normal random distribution with given mean and standard deviation, truncated to (range[0], range[1]] by accept-reject sampling.
+       A low acceptance rate can leed to poor performance, for example with a very small range or a mean far outside the range.
+
+    .. py:method:: custom(func) -> network_value
+       :staticmethod:
+
+       A custom value using the provided function ``func`` with signature ``(src: cell_global_label, dest: cell_global_label) -> float``,
+       which must accept a ``src`` and ``dest`` ``cell_global_label`` and return a float value for the connection / gap junction.
+       Repeated calls with the same arguments must give the same result. For gap junction, ``func`` must also be symmetric.
+
+    .. py:method:: __call__(src: cell_global_label, dest: cell_global_label) -> float
+       :noindex:
+
+       Generate value for connection or gap junction between ``src`` and ``dest``.
+
+
+.. py:class:: cell_connection_network
+
+    A network of cell connections.
+
+    .. py:method:: __init__(weight: float | network_value, delay: float | network_value, selection: network_selection, src_pop: list[cell_global_range_label], dest_pop: list[cell_global_range_label])
+
+       Create a network between the source population ``src_pop`` and destination population ``dest_pop`` based on the given selection.
+
+    .. py:method:: generate(gid: int) -> list[connection]
+
+       Generate cell connections for cell with given ``gid``.
+
+    .. property:: weight
+
+       The weight used in generated cell connections.
+
+    .. property:: delay
+
+       The delay used in generated cell connections.
+
+    .. property:: selection
+
+       The network selection used to generate cell connections.
+
+    .. property:: source_population
+
+       The source population used to generate cell connections.
+
+    .. property:: destination_population
+
+       The destination population used to generate cell connections.
+
+
+.. py:class:: gap_junction_network
+
+    A network of gap junctions.
+
+    .. py:method:: __init__(weight: float | network_value, selection: network_selection, src_pop: list[cell_global_range_label], dest_pop: list[cell_global_range_label])
+
+       Create a network between the source population ``src_pop`` and destination population ``dest_pop`` based on the given selection.
+
+    .. py:method:: generate(gid: int) -> list[gap_junction_connection]
+
+       Generate cell connections for cell with given ``gid``.
+
+    .. property:: weight
+
+       The weight used in generated cell connections.
+
+    .. property:: selection
+
+       The network selection used to generate cell connections.
+
+    .. property:: source_population
+
+       The source population used to generate cell connections.
+
+    .. property:: destination_population
+
+       The destination population used to generate cell connections.

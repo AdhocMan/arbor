@@ -98,6 +98,41 @@ The types defined below are used as identifiers for cells and members of cell-lo
            # on cell 5
            global_label = arbor.cell_global_label(5, local_label)
 
+.. class:: cell_global_range_label
+
+   For global identification of an item on a cell.
+   This is used for selecting the source of a connection or the peer site of a gap junction connection.
+   The :attr:`label` expects a :class:`cell_local_label` type.
+
+   .. attribute:: begin
+
+      The first global identifier of a cell in the inverval (begin, end].
+
+   .. attribute:: end
+
+      The past-the-end global identifier of a cell in the inverval (begin, end].
+
+   .. attribute:: label
+
+      Identifier of a single item on the cell.
+
+   .. container:: example-code
+
+       .. code-block:: python
+
+           import arbor
+
+           # Create the policy
+           policy = arbor.selection_policy.univalent
+
+           # Creat the local label referring to the group of items labeled "syn0".
+           # The group is expected to only contain 1 item.
+           local_label = arbor.cell_local_label("syn0", policy)
+
+           # Create the global range label referring to the group of cells and items labeled "syn0"
+           # on cells 0, 1 and 2
+           global_range_label = arbor.cell_global_range_label(0, 3, local_label)
+
 .. class:: cell_member
 
     .. function:: cell_member(gid, index)
