@@ -91,6 +91,24 @@ cells and members of cell-local collections.
 
       Identifier of a single item on the cell.
 
+.. cpp:class::  cell_global_range_label_type
+
+   For referring to a labeled placement on a range of cells identified by an interval [begin, end).
+   This is used to define a network population for selecting the source of a connection or the peer site of a gap junction
+   connection in network generation.
+
+   .. cpp:member:: cell_gid_type   begin
+
+      The first global identifier of a cell in the inverval (begin, end].
+
+   .. cpp:member:: cell_gid_type   end
+
+      The past-the-end global identifier of a cell in the inverval (begin, end].
+
+   .. cpp:member:: cell_local_label_type label
+
+      Identifier of a single item on the cell.
+
 .. cpp:type::  cell_local_size_type
 
     An unsigned integer for for counts of cell-local data.
