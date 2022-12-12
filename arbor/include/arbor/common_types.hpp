@@ -97,6 +97,7 @@ struct cell_global_label_type {
     cell_global_label_type(cell_gid_type gid, cell_tag_type tag, lid_selection_policy policy): gid(gid), label(std::move(tag), policy) {}
 };
 
+// For referring to a labeled placement on a range of cells identified by an intverval [begin, end).
 
 struct cell_global_range_label_type {
     cell_gid_type begin, end;

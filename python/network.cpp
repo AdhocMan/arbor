@@ -17,7 +17,7 @@ void register_network(py::module& m) {
 
     m.def("unique",
         &arb::unique,
-        "s"_a,
+        "pop"_a,
         "Removes any duplicate global labels contained by merging overlapping intervals for "
         "matching local labels.");
 

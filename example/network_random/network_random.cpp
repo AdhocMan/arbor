@@ -73,6 +73,8 @@ public:
         cell_params_(params),
         min_delay_(min_delay)
     {
+        // Select all cells by specifying the range [0, num_cells_).
+        // Use different local labels for source and destination.
         arb::network_population src_pop = {{0, num_cells_, "detector"}};
         arb::network_population dest_pop = {{0, num_cells_, "primary_syn"}};
 
@@ -88,9 +90,13 @@ public:
         // A randomly generated cell connection weight, truncated to be between 0.0 and 1.0
         auto weight = arb::network_value::truncated_normal_distribution(84, event_weight_, 0.1, {0.0, 1.0});
 
-        // Create the cell connection network, with a combination of a ring and random selection
-        network_ = arb::cell_connection_network(
-            weight, min_delay_, ring_selection | random_selection, src_pop, dest_pop);
+        // Create the cell connection network, with a combination of a ring and random selection,
+        // but allow connections between different cells
+        network_ = arb::cell_connection_network(weight,
+            min_delay_,
+            arb::network_selection::inter_cell() & (ring_selection | random_selection),
+            src_pop,
+            dest_pop);
 
         gprop_.default_parameters = arb::neuron_parameter_defaults;
     }

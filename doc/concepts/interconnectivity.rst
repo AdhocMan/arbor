@@ -169,6 +169,71 @@ full recipe.
    .. Note::
       Only cable cells support gap junctions as of now.
 
+
+High-Level Network Specification
+--------------------------------
+A high-level network specification API is available to generate cell connections and gap junctions.
+The API is to some extent based on the `connection-set algebra <https://pubmed.ncbi.nlm.nih.gov/22437992/>`_ proposed by Mikael Djurfeldt.
+After specifying cell populations as source and destination, a selection criterion is independently applied to each possible connection identified by a global source and destination label.
+This allows for lazy network generation, by only evaluating the selection criterion for connections relevant for a requested cell. Network selections can be combined by the logical operations `and`, `or` and `xor`.
+For each generated connection, a network value provides a parameter, such as a weight or delay, which is similarly independently generated.
+An example for a network selection is `inter_cell` for selecting connections between different cells and `bernoulli_random` for a random selection.
+For network values, uniform and normal random distributions are possible examples. In more complex cases, a custom selection or value function can also be provided.
+A network is intended to be created once and called to generate from within a cell recipe when required.
+
+An example for combination of a custom and random network selection in Python:
+
+.. code-block:: python
+
+   # Custom network selection
+   class ring_selection:
+       def __init__(self, ncells):
+           self.ncells = ncells
+
+       # Select based on the cell_global_label src and dest
+       def __call__(self, src, dest):
+           if src.gid + 1 == dest.gid or (dest.gid == 0 and src.gid == ncells - 1):
+               return True
+
+           return False
+
+
+   # (5) Create a recipe that generates a network of connected cells.
+   class random_ring_recipe(arbor.recipe):
+       def __init__(self, ncells):
+           # The base C++ class constructor must be called first, to ensure that
+           # all memory in the C++ class is initialized correctly.
+           arbor.recipe.__init__(self)
+           self.ncells = ncells
+           self.props = arbor.neuron_cable_properties()
+
+           w = arbor.network_value.uniform_distribution(
+               84, [0.01, 0.02]
+           )  # Random between 0.01 and 0.02 μS on expsyn
+           d = 5  # ms delay
+
+           # Select all cells by specifying the range [0, ncells).
+           # Use different local labels for source and destination.
+           src_pop = [arbor.cell_global_range_label(0, ncells, "detector")]
+           dest_pop = [arbor.cell_global_range_label(0, ncells, "syn")]
+
+           # Select only inter-cell connections, which are either randomly selected with a 8%
+           # probability or part of a ring.
+           selection = arbor.network_selection.inter_cell() & (
+               arbor.network_selection.bernoulli_random(42, 0.08)
+               | arbor.network_selection.custom(ring_selection(ncells))
+           )
+
+           self.connection_network = arbor.cell_connection_network(
+               w, d, selection, src_pop, dest_pop
+           )
+
+       # (8) Generate network
+       def connections_on(self, gid):
+           return self.connection_network.generate(gid)
+
+
+
 API
 ---
 

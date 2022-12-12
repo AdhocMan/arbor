@@ -163,7 +163,7 @@ High-Level Network Description
        :staticmethod:
 
        Select only connections / gap junctions between different items.
-       Items identified by a different local celll label on the same cell are selected.
+       Items identified by a different local cell label on the same cell are selected.
 
     .. py:method:: __call__(src: cell_global_label, dest: cell_global_label) -> bool
        :noindex:
@@ -186,6 +186,11 @@ High-Level Network Description
 .. py:class:: network_value
 
     A value used in network generation.
+
+    .. py:method:: uniform(value: float) -> network_value
+       :staticmethod:
+
+       Constant uniform value for all connections / gap junctions.
 
     .. py:method:: uniform_distribution(seed: unsigned int, range: [float, float]) -> network_value
        :staticmethod:

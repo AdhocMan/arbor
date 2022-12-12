@@ -97,6 +97,9 @@ class random_ring_recipe(arbor.recipe):
             84, [0.01, 0.02]
         )  # Random between 0.01 and 0.02 μS on expsyn
         d = 5  # ms delay
+
+        # Select all cells by specifying the range [0, ncells).
+        # Use different local labels for source and destination.
         src_pop = [arbor.cell_global_range_label(0, ncells, "detector")]
         dest_pop = [arbor.cell_global_range_label(0, ncells, "syn")]
 
