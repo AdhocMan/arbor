@@ -71,23 +71,18 @@ def make_cable_cell(gid):
     return arbor.cable_cell(tree, decor, labels)
 
 
-def distance(src, dest):
-    # distance between the source and destination
-    # return (...)
-
 # Custom network selection
-class random_distance_selection:
-    def __init__(self):
-        self.max_distance = 50
-        self.rand = arbor.network_value.uniform_distribution(42, 0.0, 1.0)
+class ring_selection:
+    def __init__(self, ncells):
+        self.ncells = ncells
 
     # Select based on the cell_global_label src and dest
     def __call__(self, src, dest):
-        d = distance(src, dest)
-        if d > self.max_distance:
-            return False
+        # Select any connection between consecutive cells with wraparound
+        if src.gid + 1 == dest.gid or (dest.gid == 0 and src.gid == ncells - 1):
+            return True
 
-        return self.rand(src, dest) < (self.max_distance - d) / self.max_distance
+        return False
 
 
 # (5) Create a recipe that generates a network of connected cells.
