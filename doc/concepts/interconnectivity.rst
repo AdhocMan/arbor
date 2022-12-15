@@ -175,7 +175,7 @@ High-Level Network Specification
 A high-level network specification API is available to generate cell connections and gap junctions.
 The API is to some extent based on the `connection-set algebra <https://pubmed.ncbi.nlm.nih.gov/22437992/>`_ proposed by Mikael Djurfeldt.
 After specifying cell populations as source and destination, a selection criterion is independently applied to each possible connection identified by a global source and destination label.
-This allows for lazy network generation, by only evaluating the selection criterion for connections relevant for a requested cell. Network selections can be combined by the logical operations `and`, `or` and `xor`.
+This allows for lazy network generation, by only evaluating the selection criterion for connections relevant for a requested cell. Network selections can be combined by the logical operations ``and``, ``or`` and ``xor``.
 For each generated connection, a network value provides a parameter, such as a weight or delay, which is similarly independently generated.
 An example for a network selection is `inter_cell` for selecting connections between different cells and `bernoulli_random` for a random selection.
 For network values, uniform and normal random distributions are possible examples. In more complex cases, a custom selection or value function can also be provided.
