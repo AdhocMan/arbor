@@ -81,6 +81,7 @@ public:
         // A custom selection, which selects any connection within a ring
         auto ring_selection = arb::network_selection::custom(
             [&](const arb::cell_global_label_type& src, const arb::cell_global_label_type& dest) {
+                // Select any connection between consecutive cells with wraparound
                 return (src.gid + 1 == dest.gid) || (src.gid == num_cells_ - 1 && dest.gid == 0);
             });
 

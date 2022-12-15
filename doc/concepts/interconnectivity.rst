@@ -173,15 +173,31 @@ full recipe.
 High-Level Network Specification
 --------------------------------
 A high-level network specification API is available to generate cell connections and gap junctions.
-The API is to some extent based on the `connection-set algebra <https://pubmed.ncbi.nlm.nih.gov/22437992/>`_ proposed by Mikael Djurfeldt.
+The API is to some extent based on the `connection-set algebra <https://pubmed.ncbi.nlm.nih.gov/22437992/>`_ proposed by Mikael Djurfeldt. In this paper, a separation between connectivity structure and cell population is proposed.
+Arbor implements an indicator function as ``network_selection``, which allows individual evaluation of what Djurfeldt refers to as connection mask, returning ``true`` if the connection exists and ``false`` otherwise.
+Network populations are defined as a set of cells and local labels, which provide potential locations to connect to.
 After specifying cell populations as source and destination, a selection criterion is independently applied to each possible connection identified by a global source and destination label.
 This allows for lazy network generation, by only evaluating the selection criterion for connections relevant for a requested cell. Network selections can be combined by the logical operations ``and``, ``or`` and ``xor``.
-For each generated connection, a network value provides a parameter, such as a weight or delay, which is similarly independently generated.
-An example for a network selection is `inter_cell` for selecting connections between different cells and `bernoulli_random` for a random selection.
-For network values, uniform and normal random distributions are possible examples. In more complex cases, a custom selection or value function can also be provided.
-A network is intended to be created once and called to generate from within a cell recipe when required.
+The available ``network_selection`` types are:
 
-An example for combination of a custom and random network selection in Python:
+- ``all``: Select all connections. Always returns true.
+- ``none``: Reject all connections. Always return false.
+- ``invert``: Invert a given selection. Effectively a logical ``not`` operation.
+- ``bernoulli_random``: Randomly select or reject each connection with a given probability.
+- ``inter_cell``: Only select connections between different cells.
+- ``not_equal``: Only select connections between different global labels. A connection between two locations with different local labels on the same cell is possible.
+- ``custom``: A user provided custom selection.
+
+For each generated connection, a network value provides a parameter, such as a weight or delay, which is similarly independently generated.
+The available ``network_value`` types are:
+
+- ``uniform``: A constant uniform value. Always returns the same value for each connection.
+- ``uniform_distribution``: A uniform random distribution. Returns a random value in a given range for each connection.
+- ``normal_distribution``: A normal random distribution. Returns a normally distributed random value for each connection.
+- ``truncated_distribution``: A truncated normal random distribution. Returns a normally distributed random value, sampled such that it is always in a given range for each connection.
+- ``custom``: A user provided custom value function.
+
+An example for combination of a custom and random network selection in Python, where connections between consecutive cells are always selected and complemented by random connections:
 
 .. code-block:: python
 
@@ -192,6 +208,7 @@ An example for combination of a custom and random network selection in Python:
 
        # Select based on the cell_global_label src and dest
        def __call__(self, src, dest):
+           # Select any connection between consecutive cells with wraparound
            if src.gid + 1 == dest.gid or (dest.gid == 0 and src.gid == ncells - 1):
                return True
 
@@ -232,6 +249,30 @@ An example for combination of a custom and random network selection in Python:
        def connections_on(self, gid):
            return self.connection_network.generate(gid)
 
+
+Another possible usecase involves selection based on distance between cells. Arbor itself is not aware of global cell position and orientation. However, if a user has some way generating or reading cell positions, the network specification can be used a building block. Let's suppose one would want to randomly select connections between cells within a certain radius based on the distance. Such a custom selection function could be implemented as follows:
+
+.. code-block:: python
+
+      def distance(src, dest):
+          # distance between the source and destination
+          # return (...)
+
+      # Custom network selection
+      class random_distance_selection:
+          def __init__(self):
+              self.max_distance = 50
+              self.rand = arbor.network_value.uniform_distribution(42, 0.0, 1.0)
+
+          # Select based on the cell_global_label src and dest
+          def __call__(self, src, dest):
+              d = distance(src, dest)
+              # Only select if within a maximum radius
+              if d > self.max_distance:
+                  return False
+
+              # Selection probability is linear between 1.0 at zero distance and 0.0 at maximum distance
+              return self.rand(src, dest) < (self.max_distance - d) / self.max_distance
 
 
 API
