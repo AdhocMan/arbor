@@ -2,6 +2,8 @@
 #include <arbor/export.hpp>
 #include <arbor/network.hpp>
 #include <arbor/recipe.hpp>
+#include <stdexcept>
+#include <util/spatial_tree.hpp>
 
 #include <algorithm>
 #include <functional>
@@ -10,6 +12,7 @@
 #include <string>
 #include <utility>
 #include <cstdint>
+#include <cmath>
 
 #include "Random123/boxmuller.hpp"
 #include "util/strprintf.hpp"
@@ -82,41 +85,52 @@ double normal_rand_from_key_pair(std::array<unsigned, 2> seed,
 
 }  // namespace
 
-ARB_ARBOR_API network_population unique(const network_population& pop) {
-    std::map<cell_local_label_type, network_population> labeled_population;
-    for (const auto& s: pop) { labeled_population[s.label].emplace_back(s); }
+network_cell_group::network_cell_group(cell_gid_type gid_begin,
+    cell_gid_type gid_end,
+    std::vector<cell_local_label_type> src_labels,
+    std::vector<cell_local_label_type> dest_labels):
+    gid_begin(gid_begin),
+    gid_end(gid_end),
+    src_labels(std::move(src_labels)),
+    dest_labels(std::move(dest_labels)) {}
 
-    network_population unique_pop;
-
-    for (auto& [_, pop]: labeled_population) {
-        for (auto& a: pop) {
-            if (a.begin < a.end)
-                for (auto& b: pop) {
-                    // check if intervals overlap and a != b
-                    if ((a.begin != b.begin || a.end != b.end) &&
-                        ((a.begin <= b.begin && a.end > b.begin) ||
-                            (b.begin <= a.begin && b.end > a.begin))) {
-                        // merge intervals and set one to empty
-                        a.begin = std::min(a.begin, b.begin);
-                        a.end = std::max(a.end, b.end);
-                        b.begin = 0;
-                        b.end = 0;
-                    }
-                }
-        }
-        for (const auto& a: pop) {
-            // keep all non-empty entries
-            if (a.begin < a.end) unique_pop.emplace_back(a);
-        }
-    }
-
-    return unique_pop;
+spatial_network_cell_group::spatial_network_cell_group(network_cell_group group,
+    std::vector<network_location> locations):
+    group(std::move(group)),
+    locations(std::move(locations)) {
+    if (this->locations.size() != this->group.gid_end - this->group.gid_begin)
+        throw std::runtime_error("spatial_network_cell_group: The number of points is not "
+                                 "equal to the network cell group size.");
 }
 
-ARB_ARBOR_API network_population join(const network_population& a, network_population b) {
-    b.insert(b.end(), a.begin(), a.end());
-    return b;
+spatial_network_cell_group::spatial_network_cell_group(cell_gid_type gid_begin,
+    std::vector<cell_local_label_type> src_labels,
+    std::vector<cell_local_label_type> dest_labels,
+    std::vector<network_location> locations):
+    group(gid_begin, gid_begin + locations.size(), std::move(src_labels), std::move(dest_labels)),
+    locations(std::move(locations)) {}
+
+network_gj_group::network_gj_group(cell_gid_type gid_begin,
+    cell_gid_type gid_end,
+    std::vector<cell_local_label_type> labels):
+    gid_begin(gid_begin),
+    gid_end(gid_end),
+    labels(std::move(labels)) {}
+
+spatial_network_gj_group::spatial_network_gj_group(network_gj_group group,
+    std::vector<network_location> locations):
+    group(std::move(group)),
+    locations(std::move(locations)) {
+    if (this->locations.size() != this->group.gid_end - this->group.gid_begin)
+        throw std::runtime_error("spatial_network_cell_group: The number of points is not "
+                                 "equal to the network cell group size.");
 }
+
+spatial_network_gj_group::spatial_network_gj_group(cell_gid_type gid_begin,
+    std::vector<cell_local_label_type> labels,
+    std::vector<network_location> locations):
+    group(gid_begin, gid_begin + locations.size(), std::move(labels)),
+    locations(std::move(locations)) {}
 
 struct network_selection::bernoulli_random_impl: public selection_impl {
     double p = 0;
@@ -192,6 +206,7 @@ struct network_selection::and_impl: public selection_impl {
 
     and_impl(network_selection l, network_selection r): left(std::move(l)), right(std::move(r)) {}
 
+
     inline bool select(cell_gid_type src_gid,
         const cell_local_label_type& src_label,
         cell_gid_type dest_gid,
@@ -210,8 +225,12 @@ struct network_selection::or_impl: public selection_impl {
         const cell_local_label_type& src_label,
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label) const override {
-        return left.select(src_gid, src_label, dest_gid, dest_label) ||
-               right.select(src_gid, src_label, dest_gid, dest_label);
+        return left.select(src_gid,
+                   src_label,
+                   dest_gid,
+                   dest_label) ||
+               right.select(
+                   src_gid, src_label, dest_gid, dest_label);
     }
 };
 
@@ -238,9 +257,10 @@ struct network_selection::invert_impl: public selection_impl {
         const cell_local_label_type& src_label,
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label) const override {
-        return !selection.select(src_gid, src_label, dest_gid, dest_label);
+        return !(selection.select(src_gid, src_label, dest_gid, dest_label));
     }
 };
+
 
 network_selection::network_selection(std::shared_ptr<selection_impl> impl):
     impl_(std::move(impl)) {}
@@ -289,6 +309,225 @@ network_selection network_selection::operator^(network_selection right) const {
         std::shared_ptr<selection_impl>(new network_selection::xor_impl(*this, std::move(right)))};
 }
 
+bool network_selection::operator()(const cell_global_label_type& src,
+    const cell_global_label_type& dest) const {
+    return impl_->select(src.gid, src.label, dest.gid, dest.label);
+}
+
+
+struct spatial_network_selection::selection_conversion_impl: public spatial_selection_impl {
+    network_selection selection;
+
+    selection_conversion_impl(network_selection s): selection(std::move(s)) {}
+
+    inline bool select(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location&,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location&,
+        double) const override {
+        return selection.select(src_gid, src_label, dest_gid, dest_label);
+    }
+};
+
+struct spatial_network_selection::and_impl: public spatial_selection_impl {
+    spatial_network_selection left, right;
+
+    and_impl(spatial_network_selection l, spatial_network_selection r): left(std::move(l)), right(std::move(r)) {}
+
+    std::optional<double> max_distance() const override {
+        const auto d_left = left.max_distance();
+        const auto d_right = right.max_distance();
+
+        if (d_left && d_right) return std::min(d_left.value(), d_right.value());
+        if (d_left) return d_left.value();
+        if (d_right) return d_right.value();
+
+        return std::nullopt;
+    }
+
+    inline bool select(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location& src_location,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location& dest_location,
+        double distance) const override {
+        return left.select(src_gid,
+                   src_label,
+                   src_location,
+                   dest_gid,
+                   dest_label,
+                   dest_location,
+                   distance) &&
+               right.select(
+                   src_gid, src_label, src_location, dest_gid, dest_label, dest_location, distance);
+    }
+};
+
+struct spatial_network_selection::or_impl: public spatial_selection_impl {
+    spatial_network_selection left, right;
+
+    or_impl(spatial_network_selection l, spatial_network_selection r): left(std::move(l)), right(std::move(r)) {}
+
+    std::optional<double> max_distance() const override {
+        const auto d_left = left.max_distance();
+        const auto d_right = right.max_distance();
+
+        if (d_left && d_right) return std::max(d_left.value(), d_right.value());
+
+        return std::nullopt;
+    }
+
+    inline bool select(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location& src_location,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location& dest_location,
+        double location) const override {
+        return left.select(src_gid,
+                   src_label,
+                   src_location,
+                   dest_gid,
+                   dest_label,
+                   dest_location,
+                   location) ||
+               right.select(
+                   src_gid, src_label, src_location, dest_gid, dest_label, dest_location, location);
+    }
+};
+
+struct spatial_network_selection::xor_impl: public spatial_selection_impl {
+    spatial_network_selection left, right;
+
+    xor_impl(spatial_network_selection l, spatial_network_selection r): left(std::move(l)), right(std::move(r)) {}
+
+    std::optional<double> max_distance() const override {
+        const auto d_left = left.max_distance();
+        const auto d_right = right.max_distance();
+
+        if (d_left && d_right) return std::max(d_left.value(), d_right.value());
+
+        return std::nullopt;
+    }
+
+    inline bool select(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location& src_location,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location& dest_location,
+        double distance) const override {
+        return left.select(src_gid,
+                   src_label,
+                   src_location,
+                   dest_gid,
+                   dest_label,
+                   dest_location,
+                   distance) ^
+               right.select(
+                   src_gid, src_label, src_location, dest_gid, dest_label, dest_location, distance);
+    }
+};
+
+
+struct spatial_network_selection::custom_impl: public spatial_selection_impl {
+    std::function<bool(const cell_global_label_type&,
+        const network_location&,
+        const cell_global_label_type&,
+        const network_location&,
+        double)>
+        func;
+
+    custom_impl(std::function<bool(const cell_global_label_type&,
+            const network_location&,
+            const cell_global_label_type&,
+            const network_location&,
+            double)> f):
+        func(std::move(f)) {}
+
+    inline bool select(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location& src_location,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location& dest_location,
+        double distance) const override {
+        return func({src_gid, src_label}, src_location, {dest_gid, dest_label}, dest_location, distance);
+    }
+};
+
+
+struct spatial_network_selection::within_distance_impl: public spatial_selection_impl {
+    double d;
+
+    within_distance_impl(double d): d(d) {}
+
+    std::optional<double> max_distance() const override { return d; }
+
+    inline bool select(cell_gid_type,
+        const cell_local_label_type&,
+        const network_location&,
+        cell_gid_type,
+        const cell_local_label_type&,
+        const network_location&,
+        double distance) const override {
+        return distance <= d;
+    }
+};
+
+spatial_network_selection::spatial_network_selection(network_selection s):
+    impl_(new selection_conversion_impl(std::move(s))) {}
+
+spatial_network_selection::spatial_network_selection(std::shared_ptr<spatial_selection_impl> impl):
+    impl_(std::move(impl)) {}
+
+bool spatial_network_selection::operator()(const cell_global_label_type& src,
+    const network_location& src_location,
+    const cell_global_label_type& dest,
+    const network_location& dest_location) const {
+    const network_location diff = {src_location[0] - dest_location[0],
+        src_location[1] - dest_location[1],
+        src_location[2] - dest_location[2]};
+    const double distance = std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
+    return impl_->select(src.gid, src.label, src_location, dest.gid, dest.label, dest_location, distance);
+}
+
+spatial_network_selection spatial_network_selection::operator&(
+    spatial_network_selection right) const {
+    return {std::shared_ptr<spatial_selection_impl>(
+        new spatial_network_selection::and_impl(*this, std::move(right)))};
+}
+
+spatial_network_selection spatial_network_selection::operator|(
+    spatial_network_selection right) const {
+    return {std::shared_ptr<spatial_selection_impl>(
+        new spatial_network_selection::or_impl(*this, std::move(right)))};
+}
+
+spatial_network_selection spatial_network_selection::operator^(
+    spatial_network_selection right) const {
+    return {std::shared_ptr<spatial_selection_impl>(
+        new spatial_network_selection::xor_impl(*this, std::move(right)))};
+}
+
+spatial_network_selection spatial_network_selection::custom(
+    std::function<bool(const cell_global_label_type&,
+        const network_location&,
+        const cell_global_label_type&,
+        const network_location&,
+        double)> func) {
+    return {std::shared_ptr<spatial_selection_impl>(
+        new spatial_network_selection::custom_impl(std::move(func)))};
+}
+
+spatial_network_selection spatial_network_selection::within_distance(double distance) {
+    return {std::shared_ptr<spatial_selection_impl>(
+        new spatial_network_selection::within_distance_impl(distance))};
+}
+
 struct network_value::uniform_distribution_impl: public value_impl {
     unsigned seed = 0;
     std::array<double, 2> range;
@@ -315,6 +554,7 @@ struct network_value::uniform_distribution_impl: public value_impl {
         return (range[1] - range[0]) * rand_num + range[0];
     }
 };
+
 
 struct network_value::normal_distribution_impl: public value_impl {
     unsigned seed = 0;
@@ -436,93 +676,530 @@ network_value network_value::uniform(double value) {
     return {std::shared_ptr<value_impl>(new uniform_impl(value))};
 }
 
-cell_connection_network::cell_connection_network():
-    selection_(network_selection::none()),
-    weight_(0.0),
-    delay_(0.0) {}
+
+struct spatial_network_value::value_conversion_impl: public spatial_value_impl {
+    network_value value;
+
+    value_conversion_impl(network_value v): value(std::move(v)) {}
+
+    inline double get(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location&,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location&,
+        double) const override {
+        return value.get(src_gid, src_label, dest_gid, dest_label);
+    }
+};
+
+struct spatial_network_value::custom_impl: public spatial_value_impl {
+    std::function<double(const cell_global_label_type&,
+        const network_location&,
+        const cell_global_label_type&,
+        const network_location&,
+        double)>
+        func;
+
+    custom_impl(std::function<double(const cell_global_label_type&,
+            const network_location&,
+            const cell_global_label_type&,
+            const network_location&,
+            double)> f):
+        func(std::move(f)) {}
+
+    inline double get(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location& src_location,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location& dest_location,
+        double distance) const override {
+        return func({src_gid, src_label}, src_location, {dest_gid, dest_label}, dest_location, distance);
+    }
+};
+
+spatial_network_value::spatial_network_value(network_value value):
+    impl_(new value_conversion_impl(std::move(value))) {}
+
+spatial_network_value::spatial_network_value(std::shared_ptr<spatial_value_impl> impl):
+    impl_(std::move(impl)) {}
+
+double spatial_network_value::operator()(const cell_global_label_type& src,
+    const network_location& src_location,
+    const cell_global_label_type& dest,
+    const network_location& dest_location) const {
+    const network_location diff = {src_location[0] - dest_location[0],
+        src_location[1] - dest_location[1],
+        src_location[2] - dest_location[2]};
+    const double distance = std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
+    return impl_->get(src.gid, src.label, src_location, dest.gid, dest.label, dest_location, distance);
+}
+
+spatial_network_value spatial_network_value::custom(
+    std::function<double(const cell_global_label_type&,
+        const network_location&,
+        const cell_global_label_type&,
+        const network_location&,
+        double)> func) {
+    return {std::shared_ptr<spatial_value_impl>(
+        new spatial_network_value::custom_impl(std::move(func)))};
+}
+
+struct cell_connection_network::empty_impl: public cell_connection_network_impl {
+    std::vector<cell_connection> generate(cell_gid_type gid) const override { return {}; }
+};
+
+struct cell_connection_network::non_spatial_impl: public cell_connection_network_impl {
+    network_selection selection_;
+    network_value weight_, delay_;
+    std::vector<network_cell_group> sorted_pop_;
+
+    static bool group_comparison(const network_cell_group& a, const network_cell_group& b) {
+                    return a.gid_begin < b.gid_begin;
+    }
+
+    non_spatial_impl(network_value weight,
+        network_value delay,
+        network_selection selection,
+        std::vector<network_cell_group> pop):
+        selection_(std::move(selection)),
+        weight_(std::move(weight)),
+        delay_(std::move(delay)),
+        sorted_pop_(std::move(pop)) {
+
+        if (!sorted_pop_.empty()) {
+            // sort groups by first gid index
+            std::sort(sorted_pop_.begin(), sorted_pop_.end(), group_comparison);
+
+            // Make sure there is no overlap between groups
+            for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
+                if(sorted_pop_[i].gid_end > pop[i + 1].gid_begin)
+                    throw std::runtime_error("Network cell groups must not overlap.");
+            }
+        }
+    }
+
+    // Generate connections for the given global cell index
+    std::vector<cell_connection> generate(cell_gid_type gid) const override {
+        std::vector<cell_connection> connections;
+
+        // find potential group
+        const auto group_it = std::lower_bound(sorted_pop_.begin(),
+            sorted_pop_.end(),
+            gid,
+            [](const network_cell_group& g, cell_gid_type id) { return g.gid_begin < id; });
+
+        // return empty connections if gid is not in group
+        if (group_it == sorted_pop_.end() || group_it->gid_end <= gid) return connections;
+
+        const auto& dest_labels = group_it->dest_labels;
+
+        for (const auto& dest_label: dest_labels) {
+            for (const auto& src_group: sorted_pop_) {
+                for (const auto& src_label: src_group.src_labels) {
+                    for (auto src_gid = src_group.gid_begin; src_gid < src_group.gid_end;
+                         ++src_gid) {
+                        if (selection_.select(src_gid, src_label, gid, dest_label))
+                            connections.emplace_back(cell_global_label_type{src_gid, src_label},
+                                dest_label,
+                                weight_.get(src_gid, src_label, gid, dest_label),
+                                delay_.get(src_gid, src_label, gid, dest_label));
+                    }
+                }
+            }
+        }
+
+        // remove any duplicates
+        std::sort(connections.begin(), connections.end());
+        connections.erase(std::unique(connections.begin(), connections.end()), connections.end());
+
+        return connections;
+    }
+};
+
+
+struct cell_connection_network::spatial_impl: public cell_connection_network_impl {
+    spatial_network_selection selection_;
+    spatial_network_value weight_, delay_;
+    std::vector<spatial_network_cell_group> sorted_pop_;
+    std::optional<spatial_tree<std::pair<std::size_t, cell_gid_type>, 3>> src_tree_;
+
+    static bool group_comparison(const spatial_network_cell_group& a, const spatial_network_cell_group& b) {
+        return a.group.gid_begin < b.group.gid_begin;
+    }
+
+    spatial_impl(spatial_network_value weight,
+        spatial_network_value delay,
+        spatial_network_selection selection,
+        std::vector<spatial_network_cell_group> pop):
+        selection_(std::move(selection)),
+        weight_(std::move(weight)),
+        delay_(std::move(delay)),
+        sorted_pop_(std::move(pop)) {
+
+        if (!sorted_pop_.empty()) {
+            // sort groups by first gid index
+            std::sort(sorted_pop_.begin(), sorted_pop_.end(), group_comparison);
+
+            // Make sure there is no overlap between groups
+            for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
+                if(sorted_pop_[i].group.gid_end > pop[i + 1].group.gid_begin)
+                    throw std::runtime_error("Network cell groups must not overlap.");
+            }
+
+            if (selection_.max_distance().has_value()) {
+
+                std::vector<std::pair<network_location, std::pair<std::size_t, cell_gid_type>>>
+                    tree_data;
+
+                std::size_t group_idx = 0;
+                for(const auto& g : sorted_pop_) {
+                    // only add if source labels exist
+                    if (!g.group.src_labels.empty()) {
+                        for (auto gid = g.group.gid_begin; gid < g.group.gid_end; ++gid) {
+                            tree_data.emplace_back(g.locations[gid - g.group.gid_begin],
+                                std::make_pair(group_idx, gid));
+                        }
+                    }
+                    ++group_idx;
+                }
+
+                // Create tree with maximum depth of 8 and a leaf size target of 2^8
+                src_tree_ = spatial_tree<std::pair<std::size_t, cell_gid_type>, 3>(
+                    8, std::max<std::size_t>(10, tree_data.size() / 256), std::move(tree_data));
+            }
+        }
+
+    }
+
+    // Generate connections for the given global cell index
+    std::vector<cell_connection> generate(cell_gid_type gid) const override {
+        std::vector<cell_connection> connections;
+
+        // find potential group
+        const auto group_it = std::lower_bound(sorted_pop_.begin(),
+            sorted_pop_.end(),
+            gid,
+            [](const spatial_network_cell_group& g, const cell_gid_type& id) {
+                return g.group.gid_begin < id;
+            });
+
+        // return empty connections if gid is not in group
+        if (group_it == sorted_pop_.end() || group_it->group.gid_end <= gid) return connections;
+
+        const auto& dest_labels = group_it->group.dest_labels;
+        const auto& dest_loc = group_it->location(gid);
+
+        auto add_connections = [&](cell_gid_type src_gid,
+                                   const network_location& src_loc,
+                                   const std::vector<cell_local_label_type>& src_labels,
+                                   cell_gid_type dest_gid,
+                                   const network_location& dest_loc,
+                                   const std::vector<cell_local_label_type>& dest_label) {
+            if(dest_labels.empty() || src_labels.empty()) return;
+
+            const network_location diff = {
+                src_loc[0] - dest_loc[0], src_loc[1] - dest_loc[1], src_loc[2] - dest_loc[2]};
+            const double distance =
+                std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
+
+            for (const auto& dest_label: dest_labels) {
+                for (const auto& src_label: src_labels) {
+                    if (selection_.select(
+                            src_gid, src_label, src_loc, gid, dest_label, dest_loc, distance))
+                        connections.emplace_back(cell_global_label_type{src_gid, src_label},
+                            dest_label,
+                            weight_.get(
+                                src_gid, src_label, src_loc, gid, dest_label, dest_loc, distance),
+                            delay_.get(
+                                src_gid, src_label, src_loc, gid, dest_label, dest_loc, distance));
+                }
+            }
+        };
+
+        if (src_tree_.has_value()) {
+            const auto d = selection_.max_distance().value();
+
+            src_tree_.value().bounding_box_for_each(
+                network_location{dest_loc[0] - d, dest_loc[1] - d, dest_loc[2] - d},
+                network_location{dest_loc[0] + d, dest_loc[1] + d, dest_loc[2] + d},
+                [&](const network_location& src_loc,
+                    const std::pair<std::size_t, cell_gid_type>& src_indices) {
+                    const auto src_gid = src_indices.second;
+
+                    add_connections(src_gid,
+                        src_loc,
+                        sorted_pop_[src_indices.first].group.src_labels,
+                        gid,
+                        dest_loc,
+                        dest_labels);
+                });
+        }
+        else {
+            for (const auto& src_group: sorted_pop_) {
+                for (auto src_gid = src_group.group.gid_begin; src_gid < src_group.group.gid_end;
+                     ++src_gid) {
+
+                    const auto& src_loc = src_group.location(src_gid);
+
+                    add_connections(src_gid,
+                        src_loc,
+                        src_group.group.src_labels,
+                        gid,
+                        dest_loc,
+                        dest_labels);
+                }
+            }
+        }
+
+        // remove any duplicates
+        std::sort(connections.begin(), connections.end());
+        connections.erase(std::unique(connections.begin(), connections.end()), connections.end());
+
+        return connections;
+    }
+};
+
+
+cell_connection_network::cell_connection_network(): impl_(new cell_connection_network::empty_impl()) {}
 
 cell_connection_network::cell_connection_network(network_value weight,
     network_value delay,
     network_selection selection,
-    network_population src_pop,
-    network_population dest_pop):
-    selection_(std::move(selection)),
-    weight_(std::move(weight)),
-    delay_(std::move(delay)),
-    src_pop_(std::move(src_pop)),
-    dest_pop_(std::move(dest_pop)) {}
+    std::vector<network_cell_group> pop):
+    impl_(new cell_connection_network::non_spatial_impl(std::move(weight),
+        std::move(delay),
+        std::move(selection),
+        std::move(pop))) {}
 
-std::vector<cell_connection> cell_connection_network::generate(cell_gid_type gid) const {
+cell_connection_network::cell_connection_network(spatial_network_value weight,
+    spatial_network_value delay,
+    spatial_network_selection selection,
+    std::vector<spatial_network_cell_group> pop):
+    impl_(new cell_connection_network::spatial_impl(std::move(weight),
+        std::move(delay),
+        std::move(selection),
+        std::move(pop))) {}
 
-    std::vector<cell_connection> connections;
+struct gap_junction_network::empty_impl: public gap_junction_network_impl {
+    std::vector<gap_junction_connection> generate(cell_gid_type gid) const override { return {}; }
+};
 
-    // For cell_connection, we only need to consider connections, where gid is
-    // the destination
-    for (const auto& dest: dest_pop_) {
-        if (gid >= dest.begin && gid < dest.end) {
-            cell_gid_type src_index = 0;
-            for (const auto& src: src_pop_) {
-                for (auto src_gid = src.begin; src_gid < src.end; ++src_gid, ++src_index) {
-                    if (selection_.select(src_gid, src.label, gid, dest.label))
-                        connections.emplace_back(cell_global_label_type{src_gid, src.label},
-                            dest.label,
-                            weight_.get(src_gid, src.label, gid, dest.label),
-                            delay_.get(src_gid, src.label, gid, dest.label));
-                }
+struct gap_junction_network::non_spatial_impl: public gap_junction_network_impl {
+    network_selection selection_;
+    network_value weight_;
+    std::vector<network_gj_group> sorted_pop_;
+
+    static bool group_comparison(const network_gj_group& a, const network_gj_group& b) {
+                    return a.gid_begin < b.gid_begin;
+    }
+
+    non_spatial_impl(network_value weight,
+        network_selection selection,
+        std::vector<network_gj_group> pop):
+        selection_(std::move(selection)),
+        weight_(std::move(weight)),
+        sorted_pop_(std::move(pop)) {
+
+        if (!sorted_pop_.empty()) {
+            // sort groups by first gid index
+            std::sort(sorted_pop_.begin(), sorted_pop_.end(), group_comparison);
+
+            // Make sure there is no overlap between groups
+            for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
+                if(sorted_pop_[i].gid_end > pop[i + 1].gid_begin)
+                    throw std::runtime_error("Network cell groups must not overlap.");
             }
         }
     }
 
-    // remove any duplicates
-    std::sort(connections.begin(), connections.end());
-    connections.erase(std::unique(connections.begin(), connections.end()), connections.end());
+    // Generate connections for the given global cell index
+    std::vector<gap_junction_connection> generate(cell_gid_type gid) const override {
+        std::vector<gap_junction_connection> connections;
 
-    return connections;
-}
+        // find potential group
+        const auto group_it = std::lower_bound(sorted_pop_.begin(),
+            sorted_pop_.end(),
+            gid,
+            [](const network_gj_group& g, cell_gid_type id) { return g.gid_begin < id; });
 
-gap_junction_network::gap_junction_network(): selection_(network_selection::none()), weight_(0.0) {}
+        // return empty connections if gid is not in group
+        if (group_it == sorted_pop_.end() || group_it->gid_end <= gid) return connections;
+
+        const auto& dest_labels = group_it->labels;
+
+        for (const auto& dest_label: dest_labels) {
+            for (const auto& src_group: sorted_pop_) {
+                for (const auto& src_label: src_group.labels) {
+                    for (auto src_gid = src_group.gid_begin; src_gid < src_group.gid_end;
+                         ++src_gid) {
+                        if (selection_.select(src_gid, src_label, gid, dest_label))
+                            connections.emplace_back(cell_global_label_type{src_gid, src_label},
+                                dest_label,
+                                weight_.get(src_gid, src_label, gid, dest_label));
+                    }
+                }
+            }
+        }
+
+        // remove any duplicates
+        std::sort(connections.begin(), connections.end());
+        connections.erase(std::unique(connections.begin(), connections.end()), connections.end());
+
+        return connections;
+    }
+};
+
+
+struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
+    spatial_network_selection selection_;
+    spatial_network_value weight_;
+    std::vector<spatial_network_gj_group> sorted_pop_;
+    std::optional<spatial_tree<std::pair<std::size_t, cell_gid_type>, 3>> tree_;
+
+    static bool group_comparison(const spatial_network_gj_group& a, const spatial_network_gj_group& b) {
+        return a.group.gid_begin < b.group.gid_begin;
+    }
+
+    spatial_impl(spatial_network_value weight,
+        spatial_network_selection selection,
+        std::vector<spatial_network_gj_group> pop):
+        selection_(std::move(selection)),
+        weight_(std::move(weight)),
+        sorted_pop_(std::move(pop)) {
+
+        if (!sorted_pop_.empty()) {
+            // sort groups by first gid index
+            std::sort(sorted_pop_.begin(), sorted_pop_.end(), group_comparison);
+
+            // Make sure there is no overlap between groups
+            for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
+                if(sorted_pop_[i].group.gid_end > pop[i + 1].group.gid_begin)
+                    throw std::runtime_error("Network gj groups must not overlap.");
+            }
+
+            if (selection_.max_distance().has_value()) {
+
+                std::vector<std::pair<network_location, std::pair<std::size_t, cell_gid_type>>>
+                    tree_data;
+
+                std::size_t group_idx = 0;
+                for(const auto& g : sorted_pop_) {
+                    // only add if source labels exist
+                    if (!g.group.labels.empty()) {
+                        for (auto gid = g.group.gid_begin; gid < g.group.gid_end; ++gid) {
+                            tree_data.emplace_back(g.locations[gid - g.group.gid_begin],
+                                std::make_pair(group_idx, gid));
+                        }
+                    }
+                    ++group_idx;
+                }
+
+                // Create tree with maximum depth of 8 and a leaf size target of 2^8
+                tree_ = spatial_tree<std::pair<std::size_t, cell_gid_type>, 3>(
+                    8, std::max<std::size_t>(10, tree_data.size() / 256), std::move(tree_data));
+            }
+        }
+    }
+
+    // Generate connections for the given global cell index
+    std::vector<gap_junction_connection> generate(cell_gid_type gid) const override {
+        std::vector<gap_junction_connection> connections;
+
+        // find potential group
+        const auto group_it = std::lower_bound(sorted_pop_.begin(),
+            sorted_pop_.end(),
+            gid,
+            [](const spatial_network_gj_group& g, const cell_gid_type& id) {
+                return g.group.gid_begin < id;
+            });
+
+        // return empty connections if gid is not in group
+        if (group_it == sorted_pop_.end() || group_it->group.gid_end <= gid) return connections;
+
+        const auto& dest_labels = group_it->group.labels;
+        const auto& dest_loc = group_it->location(gid);
+
+        auto add_connections = [&](cell_gid_type src_gid,
+                                   const network_location& src_loc,
+                                   const std::vector<cell_local_label_type>& src_labels,
+                                   cell_gid_type dest_gid,
+                                   const network_location& dest_loc,
+                                   const std::vector<cell_local_label_type>& dest_label) {
+            if(dest_labels.empty() || src_labels.empty()) return;
+
+            const network_location diff = {
+                src_loc[0] - dest_loc[0], src_loc[1] - dest_loc[1], src_loc[2] - dest_loc[2]};
+            const double distance =
+                std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
+
+            for (const auto& dest_label: dest_labels) {
+                for (const auto& src_label: src_labels) {
+                    if (selection_.select(
+                            src_gid, src_label, src_loc, gid, dest_label, dest_loc, distance))
+                        connections.emplace_back(cell_global_label_type{src_gid, src_label},
+                            dest_label,
+                            weight_.get(
+                                src_gid, src_label, src_loc, gid, dest_label, dest_loc, distance));
+                }
+            }
+        };
+
+        if (tree_.has_value()) {
+            const auto d = selection_.max_distance().value();
+
+            tree_.value().bounding_box_for_each(
+                network_location{dest_loc[0] - d, dest_loc[1] - d, dest_loc[2] - d},
+                network_location{dest_loc[0] + d, dest_loc[1] + d, dest_loc[2] + d},
+                [&](const network_location& src_loc,
+                    const std::pair<std::size_t, cell_gid_type>& src_indices) {
+                    const auto src_gid = src_indices.second;
+
+                    add_connections(src_gid,
+                        src_loc,
+                        sorted_pop_[src_indices.first].group.labels,
+                        gid,
+                        dest_loc,
+                        dest_labels);
+                });
+        }
+        else {
+            for (const auto& src_group: sorted_pop_) {
+                for (auto src_gid = src_group.group.gid_begin; src_gid < src_group.group.gid_end;
+                     ++src_gid) {
+
+                    const auto& src_loc = src_group.location(src_gid);
+
+                    add_connections(
+                        src_gid, src_loc, src_group.group.labels, gid, dest_loc, dest_labels);
+                }
+            }
+        }
+
+        // remove any duplicates
+        std::sort(connections.begin(), connections.end());
+        connections.erase(std::unique(connections.begin(), connections.end()), connections.end());
+
+        return connections;
+    }
+};
+
+
+gap_junction_network::gap_junction_network(): impl_(new gap_junction_network::empty_impl()) {}
 
 gap_junction_network::gap_junction_network(network_value weight,
     network_selection selection,
-    network_population src_pop,
-    network_population dest_pop):
-    selection_(std::move(selection)),
-    weight_(std::move(weight)),
-    src_pop_(std::move(src_pop)),
-    dest_pop_(std::move(dest_pop)) {}
+    std::vector<network_gj_group> pop):
+    impl_(new gap_junction_network::non_spatial_impl(std::move(weight),
+        std::move(selection),
+        std::move(pop))) {}
 
-std::vector<gap_junction_connection> gap_junction_network::generate(cell_gid_type gid) const {
-
-    std::vector<gap_junction_connection> connections;
-
-    // For gap junctions, we need to consider all connections, where gid is
-    // the destination or the source
-    for (const auto& dest: dest_pop_) {
-        for (const auto& src: src_pop_) {
-            for (auto dest_gid = dest.begin; dest_gid < dest.end; ++dest_gid) {
-                if (gid == dest_gid) {
-                    for (auto src_gid = src.begin; src_gid < src.end; ++src_gid) {
-                        if (selection_.select(src_gid, src.label, gid, dest.label))
-                            connections.emplace_back(cell_global_label_type{src_gid, src.label},
-                                dest.label,
-                                weight_.get(src_gid, src.label, gid, dest.label));
-                    }
-                }
-                if (gid >= src.begin && gid < src.end) {
-                    if (selection_.select(dest_gid, dest.label, gid, src.label))
-                        connections.emplace_back(cell_global_label_type{dest_gid, dest.label},
-                            src.label,
-                            weight_.get(dest_gid, dest.label, gid, src.label));
-                }
-            }
-        }
-    }
-
-    // remove any duplicates
-    std::sort(connections.begin(), connections.end());
-    connections.erase(std::unique(connections.begin(), connections.end()), connections.end());
-
-    return connections;
-}
+gap_junction_network::gap_junction_network(spatial_network_value weight,
+    spatial_network_selection selection,
+    std::vector<spatial_network_gj_group> pop):
+    impl_(new gap_junction_network::spatial_impl(std::move(weight),
+        std::move(selection),
+        std::move(pop))) {}
 
 }  // namespace arb

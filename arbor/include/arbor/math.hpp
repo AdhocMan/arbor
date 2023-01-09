@@ -26,6 +26,19 @@ T constexpr cube(T a) {
     return a*a*a;
 }
 
+template <typename T, typename U, typename = std::enable_if_t<std::is_unsigned_v<U>>>
+T constexpr pow(T base, U exp) {
+    if (exp == 0) return 1;
+
+    const U exp_half = exp / 2;
+    if (2 * exp_half == exp) {
+        const auto r = ::arb::math::pow<T, U>(base, exp_half);
+        return r * r;
+    }
+
+    return base * ::arb::math::pow<T, U>(base, exp - 1);
+}
+
 // Area of circle radius r.
 template <typename T>
 T constexpr area_circle(T r) {
