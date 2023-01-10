@@ -1,11 +1,11 @@
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/functional.h>
 
-#include <arbor/version.hpp>
 #include <arbor/arbexcept.hpp>
 #include <arbor/common_types.hpp>
 #include <arbor/network.hpp>
+#include <arbor/version.hpp>
 
 #include "strprintf.hpp"
 
@@ -17,12 +17,8 @@ void register_network(py::module& m) {
 
     py::class_<arb::network_cell_group> network_cell_group(m,
         "network_cell_group",
-        "For global identification of a range items.\n\n"
-        "cell_global_range_label members:\n"
-        "(1) the first global identifier of the range of cells [begin, end).\n"
-        "(2) the past-the-end global identifier of the range of cells [begin, end).\n"
-        "(3) a cell_local_label, referring to a labeled group of items on the cell and a policy "
-        "for selecting a single item out of the group.\n");
+        "A group of cells and local labels identifying possible source and destination sites for "
+        "cell connections.");
 
     network_cell_group
         .def(py::init([](arb::cell_gid_type gid_begin,
@@ -36,21 +32,17 @@ void register_network(py::module& m) {
             "gid_end"_a,
             "src_labels"_a,
             "dest_labels"_a,
-            "Construct a network_cell_group identifier with [begin, end) global indices "
-            "and a label argument identifying a item on a range of cells.\n"
-            "The default round_robin policy is used for selecting one of possibly multiple items "
-            "on the cell associated with the label.")
+            "Construct a network_cell_group with [gid_begin, gid_end) global cell indices "
+            "and a list of source and destination labels.\n")
         .def(py::init([](py::tuple t) {
             if (py::len(t) != 4) throw std::runtime_error("tuple length != 4");
             return arb::network_cell_group{t[0].cast<arb::cell_gid_type>(),
                 t[1].cast<arb::cell_gid_type>(),
-                t[2].cast<std::vector<arb::cell_local_label_type>>(), t[3].cast<std::vector<arb::cell_local_label_type>>()};
+                t[2].cast<std::vector<arb::cell_local_label_type>>(),
+                t[3].cast<std::vector<arb::cell_local_label_type>>()};
         }),
-            "Construct a cell_global_label identifier with tuple argument (begin, end, label):\n"
-            "  begin:   The first global identifier of the range of cells [begin, end).\n"
-            "  end:   The past-the-end global identifier of the range of cells [begin, end).\n"
-            "  label: The cell_local_label representing the label and selection policy of an item "
-            "on the cell.\n")
+            "Construct a network_cell_group with [gid_begin, gid_end) global cell indices "
+            "and a list of source and destination labels.\n")
         .def_readwrite("gid_begin",
             &arb::network_cell_group::gid_begin,
             "The first global identifier of the range of cells [begin, end).")
@@ -65,49 +57,26 @@ void register_network(py::module& m) {
             &arb::network_cell_group::dest_labels,
             "The cell_local_label representing the label and selection policy of an item on the "
             "cell.");
-    // .def("__str__",
-    //     [](arb::network_cell_group m) {
-    //         return pprintf("<arbor.network_cell_group: begin {}, end {}, label ({}, {})>",
-    //             m.begin,
-    //             m.end,
-    //             m.label.tag,
-    //             m.label.policy);
-    //     })
-    // .def("__repr__", [](arb::network_cell_group m) {
-    //     return pprintf("<arbor.network_cell_group: begin {}, end {}, label ({}, {})>",
-    //         m.begin,
-    //         m.end,
-    //         m.label.tag,
-    //         m.label.policy);
-    // });
 
     py::class_<arb::spatial_network_cell_group> spatial_network_cell_group(m,
         "spatial_network_cell_group",
-        "For global identification of a range items.\n\n"
-        "cell_global_range_label members:\n"
-        "(1) the first global identifier of the range of cells [begin, end).\n"
-        "(2) the past-the-end global identifier of the range of cells [begin, end).\n"
-        "(3) a cell_local_label, referring to a labeled group of items on the cell and a policy "
-        "for selecting a single item out of the group.\n");
+        "A group of cells and local labels identifying possible source and destination sites for "
+        "cell connections, as well as a location for each cell.");
 
     spatial_network_cell_group
         .def(py::init([](arb::cell_gid_type gid_begin,
                           std::vector<arb::cell_local_label_type> src_labels,
                           std::vector<arb::cell_local_label_type> dest_labels,
                           std::vector<arb::network_location> locations) {
-            return arb::spatial_network_cell_group{gid_begin,
-                std::move(src_labels),
-                std::move(dest_labels),
-                std::move(locations)};
+            return arb::spatial_network_cell_group{
+                gid_begin, std::move(src_labels), std::move(dest_labels), std::move(locations)};
         }),
             "gid_begin"_a,
             "src_labels"_a,
             "dest_labels"_a,
             "locations"_a,
-            "Construct a network_cell_group identifier with [begin, end) global indices "
-            "and a label argument identifying a item on a range of cells.\n"
-            "The default round_robin policy is used for selecting one of possibly multiple items "
-            "on the cell associated with the label.")
+            "Construct a spatial_network_cell_group with global cell indices starting from "
+            "gid_begin, a list of source and destination labels and a location for each cell.\n")
         .def(py::init([](py::tuple t) {
             if (py::len(t) != 4) throw std::runtime_error("tuple length != 4");
             return arb::spatial_network_cell_group{t[0].cast<arb::cell_gid_type>(),
@@ -115,25 +84,73 @@ void register_network(py::module& m) {
                 t[2].cast<std::vector<arb::cell_local_label_type>>(),
                 t[3].cast<std::vector<arb::network_location>>()};
         }),
-            "Construct a cell_global_label identifier with tuple argument (begin, end, label):\n"
-            "  begin:   The first global identifier of the range of cells [begin, end).\n"
-            "  end:   The past-the-end global identifier of the range of cells [begin, end).\n"
-            "  label: The cell_local_label representing the label and selection policy of an item "
-            "on the cell.\n");
-        // .def_readwrite("gid_begin",
-        //     &arb::network_cell_group::gid_begin,
-        //     "The first global identifier of the range of cells [begin, end).")
-        // .def_readwrite("gid_end",
-        //     &arb::network_cell_group::gid_end,
-        //     "The past-the-end global identifier of the range of cells [begin, end).")
-        // .def_readwrite("src_labels",
-        //     &arb::network_cell_group::src_labels,
-        //     "The cell_local_label representing the label and selection policy of an item on the "
-        //     "cell.")
-        // .def_readwrite("dest_labels",
-        //     &arb::network_cell_group::dest_labels,
-        //     "The cell_local_label representing the label and selection policy of an item on the "
-        //     "cell.");
+            "Construct a spatial_network_cell_group with global cell indices starting from "
+            "gid_begin, a list of source and destination labels and a location for each cell.\n")
+        .def_readonly("group", &arb::spatial_network_cell_group::group, "The network cell group.")
+        .def_readonly("locations", &arb::spatial_network_cell_group::locations, "");
+
+    py::class_<arb::network_gj_group> network_gj_group(m,
+        "network_gj_group",
+        "A group of cells and local labels identifying possible gap junctions sites.");
+
+    network_gj_group
+        .def(py::init([](arb::cell_gid_type gid_begin,
+                          arb::cell_gid_type gid_end,
+                          std::vector<arb::cell_local_label_type> labels) {
+            return arb::network_gj_group{gid_begin, gid_end, std::move(labels)};
+        }),
+            "gid_begin"_a,
+            "gid_end"_a,
+            "labels"_a,
+            "Construct a network_gj_group with [gid_begin, gid_end) global cell indices "
+            "and a list of labels.\n")
+        .def(py::init([](py::tuple t) {
+            if (py::len(t) != 3) throw std::runtime_error("tuple length != 3");
+            return arb::network_gj_group{t[0].cast<arb::cell_gid_type>(),
+                t[1].cast<arb::cell_gid_type>(),
+                t[2].cast<std::vector<arb::cell_local_label_type>>()};
+        }),
+            "Construct a network_gj_group with [gid_begin, gid_end) global cell indices "
+            "and a list of labels.\n")
+        .def_readwrite("gid_begin",
+            &arb::network_gj_group::gid_begin,
+            "The first global identifier of the range of cells [begin, end).")
+        .def_readwrite("gid_end",
+            &arb::network_gj_group::gid_end,
+            "The past-the-end global identifier of the range of cells [begin, end).")
+        .def_readwrite("src_labels",
+            &arb::network_gj_group::labels,
+            "The cell_local_label representing the label and selection policy of an item on the "
+            "cell.");
+
+    py::class_<arb::spatial_network_gj_group> spatial_network_gj_group(m,
+        "spatial_network_gj_group",
+        "A group of cells and local labels identifying possible possible gap junction sites, as "
+        "well "
+        "as a location for each cell.");
+
+    spatial_network_gj_group
+        .def(py::init([](arb::cell_gid_type gid_begin,
+                          std::vector<arb::cell_local_label_type> labels,
+                          std::vector<arb::network_location> locations) {
+            return arb::spatial_network_gj_group{
+                gid_begin, std::move(labels), std::move(locations)};
+        }),
+            "gid_begin"_a,
+            "labels"_a,
+            "locations"_a,
+            "Construct a spatial_network_gj_group with global cell indices starting from "
+            "gid_begin, a list of source and destination labels and a location for each cell.\n")
+        .def(py::init([](py::tuple t) {
+            if (py::len(t) != 3) throw std::runtime_error("tuple length != 3");
+            return arb::spatial_network_gj_group{t[0].cast<arb::cell_gid_type>(),
+                t[1].cast<std::vector<arb::cell_local_label_type>>(),
+                t[2].cast<std::vector<arb::network_location>>()};
+        }),
+            "Construct a spatial_network_gj_group with global cell indices starting from "
+            "gid_begin, a list of source and destination labels and a location for each cell.\n")
+        .def_readonly("group", &arb::spatial_network_gj_group::group, "The network cell group.")
+        .def_readonly("locations", &arb::spatial_network_gj_group::locations, "");
 
     py::class_<arb::network_selection> network_selection(
         m, "network_selection", "Selects or rejects a connection when queried");
@@ -195,13 +212,16 @@ void register_network(py::module& m) {
             "src"_a,
             "dest"_a);
 
-    spatial_network_selection
+    spatial_network_selection.def(py::init<arb::network_selection>())
         .def_static("custom",
             &arb::spatial_network_selection::custom,
             "func"_a,
             "Custom selection using the provided function \"func\". "
             "Repeated calls with the same arguments to \"func\" must yield the same result")
-        .def_static("within_distance", &arb::spatial_network_selection::within_distance, "d"_a, "Select only within givin distance.")
+        .def_static("within_distance",
+            &arb::spatial_network_selection::within_distance,
+            "d"_a,
+            "Select only within givin distance.")
         .def("__and__",
             [](const arb::spatial_network_selection& self,
                 const arb::spatial_network_selection& other) { return self & other; })
@@ -236,6 +256,8 @@ void register_network(py::module& m) {
             "src_location"_a,
             "dest"_a,
             "dest_location"_a);
+
+    py::implicitly_convertible<arb::network_selection, arb::spatial_network_selection>();
 
     py::class_<arb::network_value> network_value(
         m, "network_value", "Provides a floating point value for a given connection");
@@ -285,6 +307,13 @@ void register_network(py::module& m) {
             "src"_a,
             "dest"_a);
 
+    py::class_<arb::spatial_network_value> spatial_network_value(
+        m, "spatial_network_value", "Provides a floating point value for a given connection");
+
+    spatial_network_value.def(py::init<arb::network_value>());
+
+    py::implicitly_convertible<arb::network_value, arb::spatial_network_value>();
+
     py::class_<arb::cell_connection_network> cell_connection_network(
         m, "cell_connection_network", "Generate reproducible list of cell connections.");
 
@@ -311,115 +340,31 @@ void register_network(py::module& m) {
             "delay"_a,
             "selection"_a,
             "pop"_a)
-        .def(py::init([](arb::network_value weight,
-                          arb::spatial_network_value delay,
-                          arb::spatial_network_selection selection,
-                          std::vector<arb::spatial_network_cell_group> pop) {
-            return arb::cell_connection_network(
-                std::move(weight), std::move(delay), std::move(selection), std::move(pop));
-        }),
-            "weight"_a,
-            "delay"_a,
-            "selection"_a,
-            "pop"_a)
-        .def(py::init([](arb::network_value weight,
-                          arb::network_value delay,
-                          arb::spatial_network_selection selection,
-                          std::vector<arb::spatial_network_cell_group> pop) {
-            return arb::cell_connection_network(
-                std::move(weight), std::move(delay), std::move(selection), std::move(pop));
-        }),
-            "weight"_a,
-            "delay"_a,
-            "selection"_a,
-            "pop"_a)
-        .def(py::init([](arb::network_value weight,
-                          arb::network_value delay,
-                          arb::network_selection selection,
-                          std::vector<arb::spatial_network_cell_group> pop) {
-            return arb::cell_connection_network(
-                std::move(weight), std::move(delay), std::move(selection), std::move(pop));
-        }),
-            "weight"_a,
-            "delay"_a,
-            "selection"_a,
-            "pop"_a)
-        .def(py::init([](arb::network_value weight,
-                          arb::spatial_network_value delay,
-                          arb::network_selection selection,
-                          std::vector<arb::spatial_network_cell_group> pop) {
-            return arb::cell_connection_network(
-                std::move(weight), std::move(delay), std::move(selection), std::move(pop));
-        }),
-            "weight"_a,
-            "delay"_a,
-            "selection"_a,
-            "pop"_a)
-        .def(py::init([](arb::spatial_network_value weight,
-                          arb::spatial_network_value delay,
-                          arb::network_selection selection,
-                          std::vector<arb::spatial_network_cell_group> pop) {
-            return arb::cell_connection_network(
-                std::move(weight), std::move(delay), std::move(selection), std::move(pop));
-        }),
-            "weight"_a,
-            "delay"_a,
-            "selection"_a,
-            "pop"_a)
-        .def(py::init([](arb::spatial_network_value weight,
-                          arb::network_value delay,
-                          arb::spatial_network_selection selection,
-                          std::vector<arb::spatial_network_cell_group> pop) {
-            return arb::cell_connection_network(
-                std::move(weight), std::move(delay), std::move(selection), std::move(pop));
-        }),
-            "weight"_a,
-            "delay"_a,
-            "selection"_a,
-            "pop"_a)
         .def("generate", &arb::cell_connection_network::generate, "gid"_a);
 
-    /*
     py::class_<arb::gap_junction_network> gap_junction_network(
         m, "gap_junction_network", "Generate reproducible list of gap junctions.");
 
     gap_junction_network
         .def(py::init([](arb::network_value weight,
                           arb::network_selection selection,
-                          arb::network_population src_pop,
-                          arb::network_population dest_pop) {
+                          std::vector<arb::network_gj_group> pop) {
             return arb::gap_junction_network(
-                std::move(weight), std::move(selection), std::move(src_pop), std::move(dest_pop));
+                std::move(weight), std::move(selection), std::move(pop));
         }),
             "weight"_a,
             "selection"_a,
-            "src_pop"_a,
-            "dest_pop"_a)
-        .def(py::init([](double weight,
-                          arb::network_selection selection,
-                          arb::network_population src_pop,
-                          arb::network_population dest_pop) {
+            "pop"_a)
+        .def(py::init([](arb::spatial_network_value weight,
+                          arb::spatial_network_selection selection,
+                          std::vector<arb::spatial_network_gj_group> pop) {
             return arb::gap_junction_network(
-                weight, std::move(selection), std::move(src_pop), std::move(dest_pop));
+                std::move(weight), std::move(selection), std::move(pop));
         }),
             "weight"_a,
             "selection"_a,
-            "src_pop"_a,
-            "dest_pop"_a)
-        .def("generate", &arb::gap_junction_network::generate, "gid"_a)
-        .def_property_readonly("weight",
-            &arb::gap_junction_network::weight,
-            "The weight used for generated gap junctions.")
-        .def_property_readonly("selection",
-            &arb::gap_junction_network::selection,
-            "The network selection used for generated gap junctions.")
-        .def_property_readonly("source_population",
-            &arb::gap_junction_network::source_population,
-            "The source population used for generated gap junctions.")
-        .def_property_readonly("destination_population",
-            &arb::gap_junction_network::destination_population,
-            "The destination_population used for generated gap junctions.");
-    */
+            "pop"_a)
+        .def("generate", &arb::gap_junction_network::generate, "gid"_a);
 }
 
 }  // namespace pyarb
