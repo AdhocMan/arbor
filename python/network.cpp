@@ -86,7 +86,16 @@ void register_network(py::module& m) {
         }),
             "Construct a spatial_network_cell_group with global cell indices starting from "
             "gid_begin, a list of source and destination labels and a location for each cell.\n")
-        .def_readonly("group", &arb::spatial_network_cell_group::group, "The network cell group.")
+        .def_readonly("gid_begin",
+            &arb::spatial_network_cell_group::gid_begin,
+            "The first global identifier of the range of cells [begin, end).")
+        .def_readonly("gid_end",
+            &arb::spatial_network_cell_group::gid_end,
+            "The past-the-end global identifier of the range of cells [begin, end).")
+        .def_readonly("src_labels",
+            &arb::spatial_network_cell_group::src_labels,
+            "The cell_local_label representing the label and selection policy of an item on the "
+            "cell.")
         .def_readonly("locations", &arb::spatial_network_cell_group::locations, "");
 
     py::class_<arb::network_gj_group> network_gj_group(m,
@@ -149,7 +158,16 @@ void register_network(py::module& m) {
         }),
             "Construct a spatial_network_gj_group with global cell indices starting from "
             "gid_begin, a list of source and destination labels and a location for each cell.\n")
-        .def_readonly("group", &arb::spatial_network_gj_group::group, "The network cell group.")
+        .def_readonly("gid_begin",
+            &arb::spatial_network_gj_group::gid_begin,
+            "The first global identifier of the range of cells [begin, end).")
+        .def_readonly("gid_end",
+            &arb::spatial_network_gj_group::gid_end,
+            "The past-the-end global identifier of the range of cells [begin, end).")
+        .def_readonly("src_labels",
+            &arb::spatial_network_gj_group::labels,
+            "The cell_local_label representing the label and selection policy of an item on the "
+            "cell.")
         .def_readonly("locations", &arb::spatial_network_gj_group::locations, "");
 
     py::class_<arb::network_selection> network_selection(
