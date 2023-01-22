@@ -144,6 +144,33 @@ static void for_each_pop_connection(const std::vector<network_cell_group>& pop,
     }
 }
 
+static void for_each_pop_connection(const std::vector<spatial_network_cell_group>& pop,
+    const std::function<void(const cell_global_label_type&,
+        const network_location&,
+        const cell_global_label_type&,
+        const network_location&)>& func) {
+
+    for (const auto& src: pop) {
+        for (const auto& dest: pop) {
+            for (auto src_gid = src.gid_begin; src_gid < src.gid_end; ++src_gid) {
+                for (auto dest_gid = dest.gid_begin; dest_gid < dest.gid_end; ++dest_gid) {
+                    const auto src_location = src.location(src_gid);
+                    const auto dest_location = dest.location(dest_gid);
+
+                    for (const auto& src_label: src.src_labels) {
+                        for (const auto& dest_label: dest.dest_labels) {
+                            func({src_gid, src_label},
+                                src_location,
+                                {dest_gid, dest_label},
+                                dest_location);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 TEST(cell_connection_network, simple) {
     const std::vector<network_cell_group> pop = {{0, 5, {{"a"}}, {}}, {5, 10, {}, {{"b"}}}};
     auto size = check_cell_connections(network_value::uniform(2.0),
@@ -765,5 +792,52 @@ TEST(network_value, uniform) {
         pop, [&](const cell_global_label_type& src, const cell_global_label_type& dest) {
             EXPECT_DOUBLE_EQ(v1(src, dest), 5.0);
             EXPECT_DOUBLE_EQ(v1(src, dest), v2(src, dest));
+        });
+}
+
+TEST(spatial_network_value, conversion) {
+    const network_location loc = {0.0, 0.0, 0.0};
+    const std::vector<spatial_network_cell_group> pop = {
+        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(50, loc)}};
+
+    const auto v1 = network_value::normal_distribution(42, 2.0, 2.0);
+    const spatial_network_value v2(v1);
+
+    for_each_pop_connection(pop,
+        [&](const cell_global_label_type& src,
+            const network_location& src_location,
+            const cell_global_label_type& dest,
+            const network_location& dest_location) {
+            EXPECT_DOUBLE_EQ(v1(src, dest), v2(src, src_location, dest, dest_location));
+        });
+}
+
+
+TEST(spatial_network_value, custom) {
+
+    const std::vector<spatial_network_cell_group> pop = {
+        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(10, network_location{1.0, 1.0, 1.0})},
+        {10, {{"c"}}, {{"d"}}, std::vector<network_location>(10, network_location{2.0, 2.0, 2.0})}};
+
+    for_each_pop_connection(pop,
+        [&](const cell_global_label_type& src,
+            const network_location& src_location,
+            const cell_global_label_type& dest,
+            const network_location& dest_location) {
+            auto s = spatial_network_value::custom([&](const cell_global_label_type& src_arg,
+                                                       const network_location& src_location_arg,
+                                                       const cell_global_label_type& dest_arg,
+                                                       const network_location& dest_location_arg,
+                                                       double distance_arg) {
+                EXPECT_EQ(src.gid, src_arg.gid);
+                EXPECT_EQ(dest.gid, dest_arg.gid);
+                EXPECT_EQ(src.label, src_arg.label);
+                EXPECT_EQ(dest.label, dest_arg.label);
+                EXPECT_EQ(dest_location, src_location);
+
+                return 2.0;
+            });
+
+            EXPECT_DOUBLE_EQ(s(src, src_location, dest, dest_location), 2.0);
         });
 }

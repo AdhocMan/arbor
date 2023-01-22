@@ -359,7 +359,7 @@ public:
             double)> func);
 
     // Returns the value for a connection between src and dest.
-    inline double operator()(const cell_global_label_type& src,
+    double operator()(const cell_global_label_type& src,
         const network_location& src_location,
         const cell_global_label_type& dest,
         const network_location& dest_location) const;
