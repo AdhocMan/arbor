@@ -96,9 +96,12 @@ network_cell_group::network_cell_group(cell_gid_type gid_begin,
 
 spatial_network_cell_group::spatial_network_cell_group(network_cell_group group,
     std::vector<network_location> locations):
-    group(std::move(group)),
+    gid_begin(group.gid_begin),
+    gid_end(group.gid_end),
+    src_labels(std::move(group.src_labels)),
+    dest_labels(std::move(group.dest_labels)),
     locations(std::move(locations)) {
-    if (this->locations.size() != this->group.gid_end - this->group.gid_begin)
+    if (this->locations.size() != this->gid_end - this->gid_begin)
         throw std::runtime_error("spatial_network_cell_group: The number of points is not "
                                  "equal to the network cell group size.");
 }
@@ -107,7 +110,10 @@ spatial_network_cell_group::spatial_network_cell_group(cell_gid_type gid_begin,
     std::vector<cell_local_label_type> src_labels,
     std::vector<cell_local_label_type> dest_labels,
     std::vector<network_location> locations):
-    group(gid_begin, gid_begin + locations.size(), std::move(src_labels), std::move(dest_labels)),
+    gid_begin(gid_begin),
+    gid_end(gid_begin + locations.size()),
+    src_labels(std::move(src_labels)),
+    dest_labels(std::move(dest_labels)),
     locations(std::move(locations)) {}
 
 network_gj_group::network_gj_group(cell_gid_type gid_begin,
@@ -119,9 +125,11 @@ network_gj_group::network_gj_group(cell_gid_type gid_begin,
 
 spatial_network_gj_group::spatial_network_gj_group(network_gj_group group,
     std::vector<network_location> locations):
-    group(std::move(group)),
+    gid_begin(group.gid_begin),
+    gid_end(group.gid_end),
+    labels(std::move(group.labels)),
     locations(std::move(locations)) {
-    if (this->locations.size() != this->group.gid_end - this->group.gid_begin)
+    if (this->locations.size() != this->gid_end - this->gid_begin)
         throw std::runtime_error("spatial_network_cell_group: The number of points is not "
                                  "equal to the network cell group size.");
 }
@@ -129,7 +137,9 @@ spatial_network_gj_group::spatial_network_gj_group(network_gj_group group,
 spatial_network_gj_group::spatial_network_gj_group(cell_gid_type gid_begin,
     std::vector<cell_local_label_type> labels,
     std::vector<network_location> locations):
-    group(gid_begin, gid_begin + locations.size(), std::move(labels)),
+    gid_begin(gid_begin),
+    gid_end(gid_begin + locations.size()),
+    labels(std::move(labels)),
     locations(std::move(locations)) {}
 
 struct network_selection::bernoulli_random_impl: public selection_impl {
@@ -774,7 +784,7 @@ struct cell_connection_network::non_spatial_impl: public cell_connection_network
 
             // Make sure there is no overlap between groups
             for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
-                if(sorted_pop_[i].gid_end > pop[i + 1].gid_begin)
+                if(sorted_pop_[i].gid_end > sorted_pop_[i + 1].gid_begin)
                     throw std::runtime_error("Network cell groups must not overlap.");
             }
         }
@@ -788,7 +798,7 @@ struct cell_connection_network::non_spatial_impl: public cell_connection_network
         const auto group_it = std::lower_bound(sorted_pop_.begin(),
             sorted_pop_.end(),
             gid,
-            [](const network_cell_group& g, cell_gid_type id) { return g.gid_begin < id; });
+            [](const network_cell_group& g, cell_gid_type id) { return g.gid_begin < id && g.gid_end <= id; });
 
         // return empty connections if gid is not in group
         if (group_it == sorted_pop_.end() || group_it->gid_end <= gid) return connections;
@@ -826,7 +836,7 @@ struct cell_connection_network::spatial_impl: public cell_connection_network_imp
     std::optional<spatial_tree<std::pair<std::size_t, cell_gid_type>, 3>> src_tree_;
 
     static bool group_comparison(const spatial_network_cell_group& a, const spatial_network_cell_group& b) {
-        return a.group.gid_begin < b.group.gid_begin;
+        return a.gid_begin < b.gid_begin;
     }
 
     spatial_impl(spatial_network_value weight,
@@ -844,7 +854,7 @@ struct cell_connection_network::spatial_impl: public cell_connection_network_imp
 
             // Make sure there is no overlap between groups
             for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
-                if(sorted_pop_[i].group.gid_end > pop[i + 1].group.gid_begin)
+                if(sorted_pop_[i].gid_end > sorted_pop_[i + 1].gid_begin)
                     throw std::runtime_error("Network cell groups must not overlap.");
             }
 
@@ -856,9 +866,9 @@ struct cell_connection_network::spatial_impl: public cell_connection_network_imp
                 std::size_t group_idx = 0;
                 for(const auto& g : sorted_pop_) {
                     // only add if source labels exist
-                    if (!g.group.src_labels.empty()) {
-                        for (auto gid = g.group.gid_begin; gid < g.group.gid_end; ++gid) {
-                            tree_data.emplace_back(g.locations[gid - g.group.gid_begin],
+                    if (!g.src_labels.empty()) {
+                        for (auto gid = g.gid_begin; gid < g.gid_end; ++gid) {
+                            tree_data.emplace_back(g.locations[gid - g.gid_begin],
                                 std::make_pair(group_idx, gid));
                         }
                     }
@@ -881,14 +891,14 @@ struct cell_connection_network::spatial_impl: public cell_connection_network_imp
         const auto group_it = std::lower_bound(sorted_pop_.begin(),
             sorted_pop_.end(),
             gid,
-            [](const spatial_network_cell_group& g, const cell_gid_type& id) {
-                return g.group.gid_begin < id;
+            [](const spatial_network_cell_group& g, cell_gid_type id) {
+                return g.gid_begin < id && g.gid_end <= id;
             });
 
         // return empty connections if gid is not in group
-        if (group_it == sorted_pop_.end() || group_it->group.gid_end <= gid) return connections;
+        if (group_it == sorted_pop_.end() || group_it->gid_end <= gid) return connections;
 
-        const auto& dest_labels = group_it->group.dest_labels;
+        const auto& dest_labels = group_it->dest_labels;
         const auto& dest_loc = group_it->location(gid);
 
         auto add_connections = [&](cell_gid_type src_gid,
@@ -930,7 +940,7 @@ struct cell_connection_network::spatial_impl: public cell_connection_network_imp
 
                     add_connections(src_gid,
                         src_loc,
-                        sorted_pop_[src_indices.first].group.src_labels,
+                        sorted_pop_[src_indices.first].src_labels,
                         gid,
                         dest_loc,
                         dest_labels);
@@ -938,14 +948,14 @@ struct cell_connection_network::spatial_impl: public cell_connection_network_imp
         }
         else {
             for (const auto& src_group: sorted_pop_) {
-                for (auto src_gid = src_group.group.gid_begin; src_gid < src_group.group.gid_end;
+                for (auto src_gid = src_group.gid_begin; src_gid < src_group.gid_end;
                      ++src_gid) {
 
                     const auto& src_loc = src_group.location(src_gid);
 
                     add_connections(src_gid,
                         src_loc,
-                        src_group.group.src_labels,
+                        src_group.src_labels,
                         gid,
                         dest_loc,
                         dest_labels);
@@ -1008,7 +1018,7 @@ struct gap_junction_network::non_spatial_impl: public gap_junction_network_impl 
 
             // Make sure there is no overlap between groups
             for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
-                if(sorted_pop_[i].gid_end > pop[i + 1].gid_begin)
+                if(sorted_pop_[i].gid_end > sorted_pop_[i + 1].gid_begin)
                     throw std::runtime_error("Network cell groups must not overlap.");
             }
         }
@@ -1022,7 +1032,9 @@ struct gap_junction_network::non_spatial_impl: public gap_junction_network_impl 
         const auto group_it = std::lower_bound(sorted_pop_.begin(),
             sorted_pop_.end(),
             gid,
-            [](const network_gj_group& g, cell_gid_type id) { return g.gid_begin < id; });
+            [](const network_gj_group& g, cell_gid_type id) {
+                return g.gid_begin < id && g.gid_end <= id;
+            });
 
         // return empty connections if gid is not in group
         if (group_it == sorted_pop_.end() || group_it->gid_end <= gid) return connections;
@@ -1059,7 +1071,7 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
     std::optional<spatial_tree<std::pair<std::size_t, cell_gid_type>, 3>> tree_;
 
     static bool group_comparison(const spatial_network_gj_group& a, const spatial_network_gj_group& b) {
-        return a.group.gid_begin < b.group.gid_begin;
+        return a.gid_begin < b.gid_begin;
     }
 
     spatial_impl(spatial_network_value weight,
@@ -1075,7 +1087,7 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
 
             // Make sure there is no overlap between groups
             for (std::size_t i = 0; i < sorted_pop_.size() - 1; ++i) {
-                if(sorted_pop_[i].group.gid_end > pop[i + 1].group.gid_begin)
+                if(sorted_pop_[i].gid_end > sorted_pop_[i + 1].gid_begin)
                     throw std::runtime_error("Network gj groups must not overlap.");
             }
 
@@ -1087,9 +1099,9 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
                 std::size_t group_idx = 0;
                 for(const auto& g : sorted_pop_) {
                     // only add if source labels exist
-                    if (!g.group.labels.empty()) {
-                        for (auto gid = g.group.gid_begin; gid < g.group.gid_end; ++gid) {
-                            tree_data.emplace_back(g.locations[gid - g.group.gid_begin],
+                    if (!g.labels.empty()) {
+                        for (auto gid = g.gid_begin; gid < g.gid_end; ++gid) {
+                            tree_data.emplace_back(g.locations[gid - g.gid_begin],
                                 std::make_pair(group_idx, gid));
                         }
                     }
@@ -1112,13 +1124,13 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
             sorted_pop_.end(),
             gid,
             [](const spatial_network_gj_group& g, const cell_gid_type& id) {
-                return g.group.gid_begin < id;
+                return g.gid_begin < id && g.gid_end <= id;
             });
 
         // return empty connections if gid is not in group
-        if (group_it == sorted_pop_.end() || group_it->group.gid_end <= gid) return connections;
+        if (group_it == sorted_pop_.end() || group_it->gid_end <= gid) return connections;
 
-        const auto& dest_labels = group_it->group.labels;
+        const auto& dest_labels = group_it->labels;
         const auto& dest_loc = group_it->location(gid);
 
         auto add_connections = [&](cell_gid_type src_gid,
@@ -1158,7 +1170,7 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
 
                     add_connections(src_gid,
                         src_loc,
-                        sorted_pop_[src_indices.first].group.labels,
+                        sorted_pop_[src_indices.first].labels,
                         gid,
                         dest_loc,
                         dest_labels);
@@ -1166,13 +1178,13 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
         }
         else {
             for (const auto& src_group: sorted_pop_) {
-                for (auto src_gid = src_group.group.gid_begin; src_gid < src_group.group.gid_end;
+                for (auto src_gid = src_group.gid_begin; src_gid < src_group.gid_end;
                      ++src_gid) {
 
                     const auto& src_loc = src_group.location(src_gid);
 
                     add_connections(
-                        src_gid, src_loc, src_group.group.labels, gid, dest_loc, dest_labels);
+                        src_gid, src_loc, src_group.labels, gid, dest_loc, dest_labels);
                 }
             }
         }
