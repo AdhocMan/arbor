@@ -1146,6 +1146,8 @@ struct gap_junction_network::spatial_impl: public gap_junction_network_impl {
             const double distance =
                 std::sqrt(diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2]);
 
+            if (selection_.max_distance() && selection_.max_distance().value() < distance) return;
+
             for (const auto& dest_label: dest_labels) {
                 for (const auto& src_label: src_labels) {
                     if (selection_.select(

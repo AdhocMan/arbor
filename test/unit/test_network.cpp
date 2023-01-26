@@ -3,9 +3,12 @@
 #include <arbor/network.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <numeric>
+#include <random>
+#include <tuple>
 #include <unordered_map>
 
 using namespace arb;
@@ -48,6 +51,17 @@ static bool is_dest_population_member(const std::vector<Group_t>& pop,
     return false;
 }
 
+template <typename Group_t>
+static const network_location& location(const std::vector<Group_t>& pop, cell_gid_type gid) {
+    static network_location default_loc = {0., 0., 0.};
+
+    for(const auto& g : pop) {
+        if (g.gid_begin <= gid && gid < g.gid_end) return g.location(gid);
+    }
+
+    return default_loc;
+}
+
 template <typename Weight_t, typename Delay_t, typename Select_t, typename Group_t>
 static long check_cell_connections(Weight_t weight,
     Delay_t delay,
@@ -59,16 +73,35 @@ static long check_cell_connections(Weight_t weight,
     // A gid may occur more than once, so gather unique sizes first
     std::unordered_map<cell_gid_type, std::size_t> sizes;
 
+    network_location src_loc, dest_loc;
+
     for (const auto& group: pop) {
         for (auto gid = group.gid_begin; gid < group.gid_end; ++gid) {
             auto connections = cn.generate(gid);
             sizes.insert_or_assign(gid, connections.size());
+            if constexpr (std::is_same_v<Group_t, spatial_network_cell_group>)
+                dest_loc = group.location(gid);
             for (const auto& c: connections) {
+                if constexpr (std::is_same_v<Group_t, spatial_network_cell_group>)
+                    src_loc = location(pop, gid);
+
                 EXPECT_TRUE(is_src_population_member(pop, c.source));
                 EXPECT_TRUE(is_dest_population_member(pop, {gid, c.dest}));
-                EXPECT_TRUE(selector(c.source, {gid, c.dest}));
-                EXPECT_EQ(weight(c.source, {gid, c.dest}), c.weight);
-                EXPECT_EQ(delay(c.source, {gid, c.dest}), c.delay);
+
+                if constexpr (std::is_same_v<Select_t, network_selection>)
+                    EXPECT_TRUE(selector(c.source, {gid, c.dest}));
+                else
+                    EXPECT_TRUE(selector(c.source, src_loc, {gid, c.dest}, dest_loc));
+
+                if constexpr (std::is_same_v<Weight_t, network_value>)
+                    EXPECT_EQ(weight(c.source, {gid, c.dest}), c.weight);
+                else
+                    EXPECT_EQ(weight(c.source, src_loc, {gid, c.dest}, dest_loc), c.weight);
+
+                if constexpr (std::is_same_v<Delay_t, network_value>)
+                    EXPECT_EQ(delay(c.source, {gid, c.dest}), c.delay);
+                else
+                    EXPECT_EQ(delay(c.source, src_loc, {gid, c.dest}, dest_loc), c.delay);
             }
         }
     }
@@ -91,20 +124,30 @@ static long check_gap_junctions(Weight_t weight,
         }
     }
 
+    network_location src_loc, dest_loc;
+
     for (const auto& [gid, local_connections]: connections) {
+        if constexpr (std::is_same_v<Group_t, spatial_network_cell_group>)
+            dest_loc = location(pop, gid);
         for (const auto& c: local_connections) {
+            if constexpr (std::is_same_v<Group_t, spatial_network_cell_group>)
+                src_loc = location(pop, gid);
+
             EXPECT_TRUE(is_gj_population_member(pop, c.peer));
             EXPECT_TRUE(is_gj_population_member(pop, {gid, c.local}));
-            EXPECT_TRUE(selector(c.peer, {gid, c.local}));
-            EXPECT_EQ(weight(c.peer, {gid, c.local}), c.weight);
+            if constexpr (std::is_same_v<Select_t, network_selection>)
+                EXPECT_TRUE(selector(c.peer, {gid, c.local}));
+            else
+                EXPECT_TRUE(selector(c.peer, src_loc, {gid, c.local}, dest_loc));
+
+            if constexpr (std::is_same_v<Weight_t, network_value>)
+                EXPECT_EQ(weight(c.peer, {gid, c.local}), c.weight);
+            else
+                EXPECT_EQ(weight(c.peer, src_loc, {gid, c.local}, dest_loc), c.weight);
+
             if (connections.count(c.peer.gid) > 0) {
                 const auto& peer_connections = connections[c.peer.gid];
                 const auto& g = gid;  // bring into local scope
-                if (std::find_if(
-                        peer_connections.begin(), peer_connections.end(), [&g, &c](const auto& a) {
-                            if (a.peer.gid == g && a.peer.label == c.local) return true;
-                            return false;
-                        }) == peer_connections.end()) {}
                 // make sure connection is generated for peer as well
                 EXPECT_TRUE(
                     std::find_if(
@@ -114,6 +157,7 @@ static long check_gap_junctions(Weight_t weight,
                         }) != peer_connections.end());
             }
             else {
+                // failed test
                 const bool symmetric_connections = false;
                 EXPECT_TRUE(symmetric_connections);
             }
@@ -833,11 +877,204 @@ TEST(spatial_network_value, custom) {
                 EXPECT_EQ(dest.gid, dest_arg.gid);
                 EXPECT_EQ(src.label, src_arg.label);
                 EXPECT_EQ(dest.label, dest_arg.label);
-                EXPECT_EQ(dest_location, src_location);
+                EXPECT_EQ(dest_location, dest_location_arg);
+                EXPECT_EQ(src_location, src_location_arg);
 
                 return 2.0;
             });
 
             EXPECT_DOUBLE_EQ(s(src, src_location, dest, dest_location), 2.0);
         });
+}
+
+
+TEST(spatial_network_selection, conversion) {
+    const network_location loc = {0.0, 0.0, 0.0};
+    const std::vector<spatial_network_cell_group> pop = {
+        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(50, loc)}};
+
+    const auto s1 = network_selection::inter_cell();
+    const spatial_network_selection s2(s1);
+
+    for_each_pop_connection(pop,
+        [&](const cell_global_label_type& src,
+            const network_location& src_location,
+            const cell_global_label_type& dest,
+            const network_location& dest_location) {
+            EXPECT_DOUBLE_EQ(s1(src, dest), s2(src, src_location, dest, dest_location));
+        });
+}
+
+
+TEST(spatial_network_selection, custom) {
+
+    const std::vector<spatial_network_cell_group> pop = {
+        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(10, network_location{1.0, 1.0, 1.0})},
+        {10, {{"c"}}, {{"d"}}, std::vector<network_location>(10, network_location{2.0, 2.0, 2.0})}};
+
+    for_each_pop_connection(pop,
+        [&](const cell_global_label_type& src,
+            const network_location& src_location,
+            const cell_global_label_type& dest,
+            const network_location& dest_location) {
+            auto s =
+                spatial_network_selection::custom([&](const cell_global_label_type& src_arg,
+                                                      const network_location& src_location_arg,
+                                                      const cell_global_label_type& dest_arg,
+                                                      const network_location& dest_location_arg,
+                                                      double distance_arg) {
+                    EXPECT_EQ(src.gid, src_arg.gid);
+                    EXPECT_EQ(dest.gid, dest_arg.gid);
+                    EXPECT_EQ(src.label, src_arg.label);
+                    EXPECT_EQ(dest.label, dest_arg.label);
+                    EXPECT_EQ(dest_location, dest_location_arg);
+                    EXPECT_EQ(src_location, src_location_arg);
+
+                    return false;
+                });
+
+            EXPECT_FALSE(s(src, src_location, dest, dest_location));
+        });
+}
+
+
+TEST(spatial_network_selection, within_distance) {
+
+    const std::vector<spatial_network_cell_group> pop = {{0,
+        {{"a"}},
+        {{"b"}},
+        std::vector<network_location>({{1.0}, {2.0}, {3.0}, {4.0}, {5.0}, {6.0}, {7.0}})}};
+
+    const double distance = 1.0;
+
+    const auto s = spatial_network_selection::within_distance(distance);
+
+    for_each_pop_connection(pop,
+        [&](const cell_global_label_type& src,
+            const network_location& src_location,
+            const cell_global_label_type& dest,
+            const network_location& dest_location) {
+            EXPECT_EQ(s(src, src_location, dest, dest_location),
+                std::abs(src_location[0] - dest_location[0]) <= distance);
+        });
+}
+
+
+TEST(spatial_cell_connection_network, simple) {
+
+    const std::vector<spatial_network_cell_group> pop = {{0,
+        {{"a"}},
+        {{"b"}},
+        std::vector<network_location>({{1.0}, {2.0}, {3.0}, {4.0}, {5.0}, {6.0}, {7.0}})}};
+
+    const double distance = 1.0;
+
+    const auto s = spatial_network_selection::within_distance(distance) & network_selection::inter_cell();
+
+    auto size =
+        check_cell_connections(network_value::uniform(2.0), network_value::uniform(3.0), s, pop);
+    EXPECT_EQ(size, 2 * 1 + 5 * 2);
+}
+
+TEST(spatial_cell_connection_network, distance_sampling) {
+    std::vector<network_location> locations;
+    std::mt19937 rand_gen(42);
+    std::uniform_real_distribution<double> distr(-5.0, 5.0);
+
+    for(std::size_t i = 0; i < 500; ++i) {
+        locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
+    }
+
+    const std::vector<spatial_network_cell_group> pop = {{0, {{"a"}}, {{"b"}}, locations}};
+
+    const double distance = 1.2;
+
+    const auto s = spatial_network_selection::within_distance(distance) &
+                   spatial_network_selection::custom([&](const cell_global_label_type&,
+                                                         const network_location&,
+                                                         const cell_global_label_type&,
+                                                         const network_location&,
+                                                         double distance_arg) {
+                       EXPECT_LE(distance_arg, distance);
+                       return true;
+                   });
+
+    std::ignore =
+        check_cell_connections(network_value::uniform(2.0), network_value::uniform(3.0), s, pop);
+}
+
+
+TEST(spatial_cell_connection_network, full_sampling) {
+    std::vector<network_location> locations;
+    std::mt19937 rand_gen(42);
+    std::uniform_real_distribution<double> distr(-5.0, 5.0);
+
+    for(std::size_t i = 0; i < 500; ++i) {
+        locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
+    }
+
+    const std::vector<spatial_network_cell_group> pop = {{0, {{"a"}}, {{"b"}}, locations}};
+
+
+    auto size =
+        check_cell_connections(network_value::uniform(2.0), network_value::uniform(3.0), network_selection::all(), pop);
+
+    EXPECT_EQ(size, 500 * 500);
+}
+
+
+TEST(spatial_gap_junction_network, simple) {
+
+    const std::vector<spatial_network_gj_group> pop = {{0,
+        {{"a"}},
+        std::vector<network_location>({{1.0}, {2.0}, {3.0}, {4.0}, {5.0}, {6.0}, {7.0}})}};
+
+    const double distance = 1.0;
+
+    const auto s = spatial_network_selection::within_distance(distance) & network_selection::inter_cell();
+
+    auto size = check_gap_junctions(network_value::uniform(2.0), s, pop);
+    EXPECT_EQ(size, 2 * 1 + 5 * 2);
+}
+
+TEST(spatial_gap_junction_network, distance_sampling) {
+    std::vector<network_location> locations;
+    std::mt19937 rand_gen(42);
+    std::uniform_real_distribution<double> distr(-5.0, 5.0);
+
+    for (std::size_t i = 0; i < 500; ++i) {
+        locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
+    }
+
+    const std::vector<spatial_network_gj_group> pop = {{0, {{"a"}}, locations}};
+
+    const double distance = 1.2;
+
+    const auto s = spatial_network_selection::within_distance(distance) &
+                   spatial_network_selection::custom([&](const cell_global_label_type&,
+                                                         const network_location&,
+                                                         const cell_global_label_type&,
+                                                         const network_location&,
+                                                         double distance_arg) {
+                       EXPECT_LE(distance_arg, distance);
+                       return true;
+                   });
+
+    std::ignore = check_gap_junctions(network_value::uniform(2.0), s, pop);
+}
+
+TEST(spatial_gap_junction_network, full_sampling) {
+    std::vector<network_location> locations;
+    std::mt19937 rand_gen(42);
+    std::uniform_real_distribution<double> distr(-5.0, 5.0);
+
+    for (std::size_t i = 0; i < 500; ++i) {
+        locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
+    }
+
+    const std::vector<spatial_network_gj_group> pop = {{0, {{"a"}}, locations}};
+
+    auto size = check_gap_junctions(network_value::uniform(3.0), network_selection::all(), pop);
+
+    EXPECT_EQ(size, 500 * 500);
 }

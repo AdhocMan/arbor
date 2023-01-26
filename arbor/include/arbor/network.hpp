@@ -41,6 +41,10 @@ struct ARB_SYMBOL_VISIBLE spatial_network_cell_group {
         return locations.at(gid - gid_begin);
     }
 
+    inline network_location& location(cell_gid_type gid) {
+        return locations.at(gid - gid_begin);
+    }
+
     cell_gid_type gid_begin, gid_end;
     std::vector<cell_local_label_type> src_labels, dest_labels;
     std::vector<network_location> locations;
@@ -64,6 +68,10 @@ struct ARB_SYMBOL_VISIBLE spatial_network_gj_group {
         std::vector<network_location> locations);
 
     inline const network_location& location(cell_gid_type gid) const {
+        return locations.at(gid - gid_begin);
+    }
+
+    inline network_location& location(cell_gid_type gid) {
         return locations.at(gid - gid_begin);
     }
 
