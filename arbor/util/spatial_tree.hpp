@@ -21,27 +21,75 @@ public:
     using node_data = std::vector<spatial_tree>;
     using leaf_data = std::vector<std::pair<point_type, T>>;
 
-    spatial_tree(): data_(leaf_data()) {}
-
-    spatial_tree(leaf_data data): data_(std::move(data)) {}
+    spatial_tree(): size_(0), data_(leaf_data()) {}
 
     spatial_tree(std::size_t max_depth, std::size_t leaf_size_target, leaf_data data):
+        size_(data.size()),
         data_(std::move(data)) {
-        if (std::get<leaf_data>(data_).size()) {
-            min_.fill(std::numeric_limits<double>::max());
-            max_.fill(std::numeric_limits<double>::min());
+        auto& leaf_d = std::get<leaf_data>(data_);
+        if (leaf_d.empty()) return;
 
-            for (const auto &[p, _]: std::get<leaf_data>(data_)) {
-                for (std::size_t i = 0; i < DIM; ++i) {
-                    if (p[i] < min_[i]) min_[i] = p[i];
-                    if (p[i] > max_[i]) max_[i] = p[i];
-                }
+        min_.fill(std::numeric_limits<double>::max());
+        max_.fill(-std::numeric_limits<double>::max());
+
+        for (const auto &[p, _]: leaf_d) {
+            for (std::size_t i = 0; i < DIM; ++i) {
+                if (p[i] < min_[i]) min_[i] = p[i];
+                if (p[i] > max_[i]) max_[i] = p[i];
+            }
+        }
+
+        for (std::size_t i = 0; i < DIM; ++i) { mid_[i] = (max_[i] - min_[i]) / 2.0 + min_[i]; }
+
+        if (max_depth > 1 && leaf_d.size() > leaf_size_target) {
+            constexpr auto divisor = math::pow<std::size_t, std::size_t>(2, DIM);
+
+            // The initial index of the sub node containing p
+            auto sub_node_index = [&](const point_type &p) {
+                std::size_t index = 0;
+                for (std::size_t i = 0; i < DIM; ++i) { index += i * 2 * (p[i] >= mid_[i]); }
+                return index;
+            };
+
+            node_data new_nodes;
+            new_nodes.reserve(divisor);
+
+            // assign each point to sub-node
+            std::array<leaf_data, divisor> new_leaf_data;
+            for (const auto &[p, d]: leaf_d) {
+                new_leaf_data[sub_node_index(p)].emplace_back(p, d);
             }
 
-            for (std::size_t i = 0; i < DIM; ++i) { mid_[i] = (max_[i] - min_[i]) / 2.0 + min_[i]; }
+            // move sorted data_ into new sub-nodes
+            for (auto &d: new_leaf_data) {
+                if (d.size()) new_nodes.emplace_back(max_depth - 1, leaf_size_target, std::move(d));
+            }
 
-            split_recursively(0, max_depth, leaf_size_target);
+            // replace current data_ with new sub-nodes
+            this->data_ = std::move(new_nodes);
         }
+    }
+
+    spatial_tree(const spatial_tree &) = default;
+
+    spatial_tree(spatial_tree &&t) { *this = std::move(t); }
+
+    spatial_tree &operator=(const spatial_tree &) = default;
+
+    spatial_tree &operator=(spatial_tree &&t) {
+        data_ = std::move(t.data_);
+        size_ = t.size_;
+        min_ = t.min_;
+        max_ = t.max_;
+        mid_ = t.mid_;
+
+        t.data_ = leaf_data();
+        t.size_ = 0;
+        t.min_ = point_type();
+        t.max_ = point_type();
+        t.mid_ = point_type();
+
+        return *this;
     }
 
     // Iterate over all points recursively.
@@ -80,7 +128,6 @@ public:
                 if (all_smaller_eq(box_min, min_) && all_smaller_eq(max_, box_max)) {
                     // sub-nodes fully inside box -> call without further boundary
                     // checks
-
                     if constexpr (std::is_same_v<arg_type, node_data>) {
                         for (const auto &node: arg) { node.template for_each<F>(func); }
                     }
@@ -109,80 +156,12 @@ public:
             data_);
     }
 
+    inline std::size_t size() const { return size_; }
+
+    inline bool empty() const { return !size_; }
+
 private:
-    // The index of the sub node containing p
-    inline std::size_t sub_node_index(const point_type &p) {
-        std::size_t index = 0;
-        for (std::size_t i = 0; i < DIM; ++i) { index += i * 2 * (p[i] >= mid_[i]); }
-        return index;
-    }
-
-    // converts a leaf node into a tree node by splitting the data_ into 8
-    // sub-nodes
-    inline void split_current_node() {
-        if (std::holds_alternative<leaf_data>(data_)) {
-            constexpr auto divisor = math::pow<std::size_t, std::size_t>(2, DIM);
-
-            node_data new_nodes;
-            new_nodes.reserve(divisor);
-
-            // assign each point to sub-node
-            std::array<leaf_data, divisor> new_leaf_data;
-            for (const auto &[p, d]: std::get<leaf_data>(data_)) {
-                new_leaf_data[sub_node_index(p)].emplace_back(p, d);
-            }
-
-            // move sorted data_ into new sub-nodes
-            for (auto &d: new_leaf_data) { new_nodes.emplace_back(std::move(d)); }
-
-            // replace current data_ with new sub-nodes
-            this->data_ = std::move(new_nodes);
-        }
-    }
-
-    inline void split_recursively(std::size_t depth,
-        std::size_t max_depth,
-        std::size_t leaf_size_target) {
-        if (depth >= max_depth) {
-            // if maximum depth is reached do nothing for leaf nodes or combine all
-            // sub-node data for non-leaf nodes
-            std::visit(
-                [&](auto &&arg) {
-                    using arg_type = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<arg_type, node_data>) {
-                        leaf_data combined_data;
-                        this->for_each([&](const point_type &p, const T &d) {
-                            combined_data.emplace_back(p, d);
-                        });
-                        this->data_ = std::move(combined_data);
-                    }
-                },
-                data_);
-        }
-        else {
-
-            std::visit(
-                [&](auto &&arg) {
-                    using arg_type = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<arg_type, node_data>) {
-                        for (auto &node: arg) {
-                            node.split_recursively(depth + 1, max_depth, leaf_size_target);
-                        }
-                    }
-                    if constexpr (std::is_same_v<arg_type, leaf_data>) {
-                        if (arg.size() > leaf_size_target) {
-                            // converts from leaf to node. Invalidates arg.
-                            this->split_current_node();
-                            // call recursive split again for same depth, which will execute
-                            // the other branch
-                            this->split_recursively(depth, max_depth, leaf_size_target);
-                        }
-                    }
-                },
-                data_);
-        }
-    }
-
+    std::size_t size_;
     point_type min_, max_, mid_;
     std::variant<node_data, leaf_data> data_;
 };
