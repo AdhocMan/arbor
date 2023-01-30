@@ -23,10 +23,11 @@ struct ARB_SYMBOL_VISIBLE network_cell_group {
     network_cell_group(cell_gid_type gid_begin,
         cell_gid_type gid_end,
         std::vector<cell_local_label_type> src_labels,
-        std::vector<cell_local_label_type> dest_labels);
+        std::vector<cell_local_label_type> dest_labels,
+        std::vector<cell_local_label_type> gj_labels);
 
     cell_gid_type gid_begin, gid_end;
-    std::vector<cell_local_label_type> src_labels, dest_labels;
+    std::vector<cell_local_label_type> src_labels, dest_labels, gj_labels;
 };
 
 struct ARB_SYMBOL_VISIBLE spatial_network_cell_group {
@@ -35,6 +36,7 @@ struct ARB_SYMBOL_VISIBLE spatial_network_cell_group {
     spatial_network_cell_group(cell_gid_type gid_begin,
         std::vector<cell_local_label_type> src_labels,
         std::vector<cell_local_label_type> dest_labels,
+        std::vector<cell_local_label_type> gj_labels,
         std::vector<network_location> locations);
 
     inline const network_location& location(cell_gid_type gid) const {
@@ -46,65 +48,13 @@ struct ARB_SYMBOL_VISIBLE spatial_network_cell_group {
     }
 
     cell_gid_type gid_begin, gid_end;
-    std::vector<cell_local_label_type> src_labels, dest_labels;
-    std::vector<network_location> locations;
-};
-
-struct ARB_SYMBOL_VISIBLE network_gj_group {
-
-    network_gj_group(cell_gid_type gid_begin,
-        cell_gid_type gid_end,
-        std::vector<cell_local_label_type> labels);
-
-    cell_gid_type gid_begin, gid_end;
-    std::vector<cell_local_label_type> labels;
-};
-
-struct ARB_SYMBOL_VISIBLE spatial_network_gj_group {
-    spatial_network_gj_group(network_gj_group group, std::vector<network_location> locations);
-
-    spatial_network_gj_group(cell_gid_type gid_begin,
-        std::vector<cell_local_label_type> labels,
-        std::vector<network_location> locations);
-
-    inline const network_location& location(cell_gid_type gid) const {
-        return locations.at(gid - gid_begin);
-    }
-
-    inline network_location& location(cell_gid_type gid) {
-        return locations.at(gid - gid_begin);
-    }
-
-    cell_gid_type gid_begin, gid_end;
-    std::vector<cell_local_label_type> labels;
-    std::vector<network_location> locations;
-};
-
-template <typename T,
-    typename = std::enable_if_t<std::is_same_v<T, network_cell_group> ||
-                                std::is_same_v<T, network_gj_group>>>
-struct spatial {
-    spatial(T group, std::vector<network_location> locations):
-        group(std::move(group)),
-        locations(std::move(locations)) {
-        if (this->locations.size() != this->group.gid_end - this->group.gid_begin)
-            throw std::runtime_error("spatial network group: The number of points is not "
-                                     "equal to the network group size.");
-    }
-
-    inline const network_location& location(cell_gid_type gid) const {
-        return locations.at(gid - group.gid_begin);
-    }
-
-    T group;
+    std::vector<cell_local_label_type> src_labels, dest_labels, gj_labels;
     std::vector<network_location> locations;
 };
 
 class ARB_SYMBOL_VISIBLE spatial_network_selection;
 
-class ARB_SYMBOL_VISIBLE cell_connection_network;
-
-class ARB_SYMBOL_VISIBLE gap_junction_network;
+class ARB_SYMBOL_VISIBLE network_generator;
 
 class ARB_SYMBOL_VISIBLE network_selection {
 public:
@@ -144,8 +94,7 @@ public:
     bool operator()(const cell_global_label_type& src, const cell_global_label_type& dest) const;
 
 private:
-    friend cell_connection_network;
-    friend gap_junction_network;
+    friend network_generator;
     friend spatial_network_selection;
 
     struct selection_impl {
@@ -209,8 +158,7 @@ public:
     spatial_network_selection operator^(spatial_network_selection right) const;
 
 private:
-    friend cell_connection_network;
-    friend gap_junction_network;
+    friend network_generator;
 
     struct spatial_selection_impl {
         virtual bool select(cell_gid_type,
@@ -322,8 +270,7 @@ public:
     }
 
 private:
-    friend cell_connection_network;
-    friend gap_junction_network;
+    friend network_generator;
     friend spatial_network_value;
 
     struct value_impl {
@@ -373,8 +320,7 @@ public:
         const network_location& dest_location) const;
 
 private:
-    friend cell_connection_network;
-    friend gap_junction_network;
+    friend network_generator;
 
     struct spatial_value_impl {
         virtual double get(cell_gid_type,
@@ -407,71 +353,70 @@ private:
 };
 
 
-// Generate cell connections on demand
-class ARB_SYMBOL_VISIBLE cell_connection_network {
+// Generate connections on demand
+class ARB_SYMBOL_VISIBLE network_generator {
 public:
-    cell_connection_network();
+    network_generator();
 
-    cell_connection_network(network_value weight,
+    static network_generator cell_connections(network_value weight,
         network_value delay,
         network_selection selection,
         std::vector<network_cell_group> pop);
 
-    cell_connection_network(spatial_network_value weight,
+    static network_generator cell_connections(spatial_network_value weight,
         spatial_network_value delay,
         spatial_network_selection selection,
         std::vector<spatial_network_cell_group> pop);
 
-    // Generate connections for the given global cell index
-    inline std::vector<cell_connection> generate(cell_gid_type gid) const {
-        return impl_->generate(gid);
-    }
+    static network_generator gap_junctions(network_value gj_weight,
+        network_selection gj_selection,
+        std::vector<network_cell_group> pop);
 
-private:
-    struct cell_connection_network_impl {
-        virtual std::vector<cell_connection> generate(cell_gid_type gid) const = 0;
+    static network_generator gap_junctions(spatial_network_value gj_weight,
+        spatial_network_selection gj_selection,
+        std::vector<spatial_network_cell_group> pop);
 
-        virtual ~cell_connection_network_impl() = default;
-    };
-
-    struct empty_impl;
-    struct spatial_impl;
-    struct non_spatial_impl;
-
-    std::shared_ptr<cell_connection_network_impl> impl_;
-};
-
-
-// Generate gap junctions on demand
-class ARB_SYMBOL_VISIBLE gap_junction_network {
-public:
-    gap_junction_network();
-
-    gap_junction_network(network_value weight,
+    static network_generator combined(network_value weight,
+        network_value delay,
         network_selection selection,
-        std::vector<network_gj_group> pop);
+        network_value gj_weight,
+        network_selection gj_selection,
+        std::vector<network_cell_group> pop);
 
-    gap_junction_network(spatial_network_value weight,
+    static network_generator combined(spatial_network_value weight,
+        spatial_network_value delay,
         spatial_network_selection selection,
-        std::vector<spatial_network_gj_group> pop);
+        spatial_network_value gj_weight,
+        spatial_network_selection gj_selection,
+        std::vector<spatial_network_cell_group> pop);
 
     // Generate connections for the given global cell index
-    inline std::vector<gap_junction_connection> generate(cell_gid_type gid) const {
-        return impl_->generate(gid);
+    inline std::vector<cell_connection> connections_on(cell_gid_type gid) const {
+        return impl_->connections_on(gid);
+    }
+
+    inline std::vector<gap_junction_connection> gap_junctions_on(cell_gid_type gid) const {
+        return impl_->gap_junctions_on(gid);
     }
 
 private:
-    struct gap_junction_network_impl {
-        virtual std::vector<gap_junction_connection> generate(cell_gid_type gid) const = 0;
 
-        virtual ~gap_junction_network_impl() = default;
+    struct network_generator_impl {
+        virtual std::vector<cell_connection> connections_on(cell_gid_type gid) const = 0;
+
+        virtual std::vector<gap_junction_connection> gap_junctions_on(cell_gid_type gid) const = 0;
+
+        virtual ~network_generator_impl() = default;
     };
 
     struct empty_impl;
     struct spatial_impl;
     struct non_spatial_impl;
 
-    std::shared_ptr<gap_junction_network_impl> impl_;
+
+    network_generator(std::shared_ptr<network_generator_impl> impl);
+
+    std::shared_ptr<network_generator_impl> impl_;
 };
 
 }  // namespace arb

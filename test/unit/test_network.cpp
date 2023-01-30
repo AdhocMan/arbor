@@ -18,7 +18,7 @@ static bool is_gj_population_member(const std::vector<Group_t>& pop,
     const cell_global_label_type& l) {
     for (const auto& range: pop) {
         if (range.gid_begin <= l.gid && range.gid_end > l.gid) {
-            for (const auto& group_label: range.labels) {
+            for (const auto& group_label: range.gj_labels) {
                 if (group_label == l.label) return true;
             }
         }
@@ -68,7 +68,7 @@ static long check_cell_connections(Weight_t weight,
     Select_t selector,
     const std::vector<Group_t>& pop) {
 
-    cell_connection_network cn(weight, delay, selector, pop);
+    auto cn = network_generator::cell_connections(weight, delay, selector, pop);
 
     // A gid may occur more than once, so gather unique sizes first
     std::unordered_map<cell_gid_type, std::size_t> sizes;
@@ -77,7 +77,7 @@ static long check_cell_connections(Weight_t weight,
 
     for (const auto& group: pop) {
         for (auto gid = group.gid_begin; gid < group.gid_end; ++gid) {
-            auto connections = cn.generate(gid);
+            auto connections = cn.connections_on(gid);
             sizes.insert_or_assign(gid, connections.size());
             if constexpr (std::is_same_v<Group_t, spatial_network_cell_group>)
                 dest_loc = group.location(gid);
@@ -115,12 +115,12 @@ static long check_gap_junctions(Weight_t weight,
     Select_t selector,
     const std::vector<Group_t>& pop) {
 
-    gap_junction_network gn(weight, selector, pop);
+    auto gn = network_generator::gap_junctions(weight, selector, pop);
 
     std::unordered_map<cell_gid_type, std::vector<gap_junction_connection>> connections;
     for (const auto& group: pop) {
         for (auto gid = group.gid_begin; gid < group.gid_end; ++gid) {
-            if (!connections.count(gid)) connections.emplace(gid, gn.generate(gid));
+            if (!connections.count(gid)) connections.emplace(gid, gn.gap_junctions_on(gid));
         }
     }
 
@@ -216,7 +216,7 @@ static void for_each_pop_connection(const std::vector<spatial_network_cell_group
 }
 
 TEST(cell_connection_network, simple) {
-    const std::vector<network_cell_group> pop = {{0, 5, {{"a"}}, {}}, {5, 10, {}, {{"b"}}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {{"a"}}, {}, {}}, {5, 10, {}, {{"b"}}, {}}};
     auto size = check_cell_connections(network_value::uniform(2.0),
         network_value::uniform(3.0),
         network_selection::inter_cell(),
@@ -225,60 +225,61 @@ TEST(cell_connection_network, simple) {
 }
 
 TEST(cell_connection_network, complex) {
-    const std::vector<network_cell_group> pop = {
-        {0, 5, {{"sa"}, {"sb"}, {"sc"}}, {{"da"}}}, {10, 20, {{"sa"}}, {}}, {20, 50, {}, {{"da"}}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {{"sa"}, {"sb"}, {"sc"}}, {{"da"}}, {}},
+        {10, 20, {{"sa"}}, {}, {}},
+        {20, 50, {}, {{"da"}}, {}}};
     auto size = check_cell_connections(
         network_value(2.0), network_value(3.0), network_selection::all(), pop);
     EXPECT_EQ(size, (3 * 5 + 10) * (5 + 30));
 }
 
 TEST(cell_connection_network, no_targets) {
-    const std::vector<network_cell_group> pop = {{0, 5, {{"a"}}, {}}, {5, 10, {{"b"}}, {}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {{"a"}}, {}, {}}, {5, 10, {{"b"}}, {}, {}}};
     auto size = check_cell_connections(
         network_value(2.0), network_value(3.0), network_selection::all(), pop);
     EXPECT_EQ(size, 0);
 }
 
 TEST(cell_connection_network, no_sources) {
-    const std::vector<network_cell_group> pop = {{0, 5, {}, {{"a"}}}, {5, 10, {}, {{"b"}}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {}, {{"a"}}, {}}, {5, 10, {}, {{"b"}}, {}}};
     auto size = check_cell_connections(
         network_value(2.0), network_value(3.0), network_selection::all(), pop);
     EXPECT_EQ(size, 0);
 }
 
 TEST(cell_connection_network, duplicates) {
-    const std::vector<network_cell_group> pop = {{0, 5, {}, {{"a"}}}, {2, 10, {}, {{"b"}}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {}, {{"a"}}, {}}, {2, 10, {}, {{"b"}}, {}}};
     EXPECT_ANY_THROW(check_cell_connections(
         network_value(2.0), network_value(3.0), network_selection::all(), pop));
 }
 
 TEST(gap_junction_network, simple) {
-    const std::vector<network_gj_group> pop = {{0, 5, {{"a"}}}, {5, 10, {{"b"}}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {}, {}, {{"a"}}}, {5, 10, {}, {}, {{"b"}}}};
     auto size = check_gap_junctions(network_value(2.0), network_selection::inter_cell(), pop);
     EXPECT_EQ(size, 100 - 10);
 }
 
 TEST(gap_junction_network, complex) {
-    const std::vector<network_gj_group> pop = {
-        {0, 4, {{"a"}, {"b"}, {"c"}}}, {4, 8, {}}, {10, 25, {{"d"}}}};
+    const std::vector<network_cell_group> pop = {
+        {0, 4, {}, {}, {{"a"}, {"b"}, {"c"}}}, {4, 8, {}, {}, {}}, {10, 25, {}, {}, {{"d"}}}};
     auto size = check_gap_junctions(network_value(2.0), network_selection::inter_cell(), pop);
     EXPECT_EQ(size, (3 * 4 + 15) * (3 * 4 + 15) - 3 * 3 * 4 - 15);  // Substract connections to self
 }
 
 TEST(gap_junction_network, empty) {
-    const std::vector<network_gj_group> pop = {};
+    const std::vector<network_cell_group> pop = {};
     auto size = check_gap_junctions(network_value(2.0), network_selection::inter_cell(), pop);
     EXPECT_EQ(size, 0);
 }
 
 TEST(gap_junction_network, duplicates) {
-    const std::vector<network_gj_group> pop = {{0, 5, {{"a"}}}, {2, 10, {{"b"}}}};
+    const std::vector<network_cell_group> pop = {{0, 5, {}, {}, {{"a"}}}, {2, 10, {}, {}, {{"b"}}}};
     EXPECT_ANY_THROW(check_gap_junctions(network_value(2.0), network_selection::all(), pop));
 }
 
 TEST(network_selection, bernoulli_random_100_prob) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::bernoulli_random(42, 1.0);
 
@@ -290,7 +291,7 @@ TEST(network_selection, bernoulli_random_100_prob) {
 
 TEST(network_selection, bernoulli_random_0_prob) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::bernoulli_random(42, 0.0);
 
@@ -302,7 +303,7 @@ TEST(network_selection, bernoulli_random_0_prob) {
 
 TEST(network_selection, bernoulli_random_consistency) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::bernoulli_random(42, 0.5);
 
@@ -315,7 +316,7 @@ TEST(network_selection, bernoulli_random_consistency) {
 
 TEST(network_selection, bernoulli_random_seed) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s1 = network_selection::bernoulli_random(10, 0.5);
     auto s2 = network_selection::bernoulli_random(20, 0.5);
@@ -331,13 +332,13 @@ TEST(network_selection, bernoulli_random_seed) {
 }
 
 TEST(network_selection, bernoulli_random_reproducibility) {
-    const std::vector<network_cell_group> pop = {{0, 3, {{"a"}}, {}},
-        {3, 5, {{"a"}}, {{"d"}}},
-        {5, 6, {}, {{"d"}}},
-        {7, 11, {{"b"}}, {}},
-        {18, 20, {}, {{"e"}}},
-        {20, 22, {{"c"}}, {{"e"}}},
-        {22, 24, {{"c"}}, {}}};
+    const std::vector<network_cell_group> pop = {{0, 3, {{"a"}}, {}, {}},
+        {3, 5, {{"a"}}, {{"d"}}, {}},
+        {5, 6, {}, {{"d"}}, {}},
+        {7, 11, {{"b"}}, {}, {}},
+        {18, 20, {}, {{"e"}}, {}},
+        {20, 22, {{"c"}}, {{"e"}}, {}},
+        {22, 24, {{"c"}}, {}, {}}};
 
     auto s = network_selection::bernoulli_random(42, 0.5);
     std::map<cell_global_label_type, std::map<cell_global_label_type, bool>> results;
@@ -443,7 +444,7 @@ TEST(network_selection, bernoulli_random_reproducibility) {
 
 TEST(network_selection, custom) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     for_each_pop_connection(
         pop, [&](const cell_global_label_type& src, const cell_global_label_type& dest) {
@@ -462,7 +463,7 @@ TEST(network_selection, custom) {
 
 TEST(network_selection, all) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::all();
 
@@ -474,7 +475,7 @@ TEST(network_selection, all) {
 
 TEST(network_selection, none) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::none();
 
@@ -486,7 +487,7 @@ TEST(network_selection, none) {
 
 TEST(network_selection, invert) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::invert(network_selection::all());
 
@@ -498,7 +499,7 @@ TEST(network_selection, invert) {
 
 TEST(network_selection, inter_cell) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::inter_cell();
 
@@ -510,7 +511,7 @@ TEST(network_selection, inter_cell) {
 
 TEST(network_selection, not_equal) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto s = network_selection::not_equal();
 
@@ -561,7 +562,7 @@ TEST(network_value, uniform_distribution) {
     std::size_t count = 0;
 
     const std::vector<network_cell_group> pop = {
-        {0, 200, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {250, 270, {{"sc"}}, {{"dc"}}}};
+        {0, 200, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {250, 270, {{"sc"}}, {{"dc"}}, {}}};
 
     auto v = network_value::uniform_distribution(42, {-5.0, 3.0});
 
@@ -580,7 +581,7 @@ TEST(network_value, uniform_distribution) {
 
 TEST(network_value, uniform_distribution_consistency) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     auto v = network_value::uniform_distribution(42, {2.0, 5.0});
 
@@ -592,12 +593,12 @@ TEST(network_value, uniform_distribution_consistency) {
 }
 
 TEST(network_value, uniform_distribution_reproducibility) {
-    const std::vector<network_cell_group> pop = {{0, 2, {{"a"}}, {}},
-        {2, 4, {{"a"}}, {{"d"}}},
-        {4, 5, {}, {{"d"}}},
-        {12, 13, {{"b"}}, {}},
-        {13, 14, {{"b"}}, {{"e"}}},
-        {14, 15, {}, {{"e"}}}};
+    const std::vector<network_cell_group> pop = {{0, 2, {{"a"}}, {}, {}},
+        {2, 4, {{"a"}}, {{"d"}}, {}},
+        {4, 5, {}, {{"d"}}, {}},
+        {12, 13, {{"b"}}, {}, {}},
+        {13, 14, {{"b"}}, {{"e"}}, {}},
+        {14, 15, {}, {{"e"}}, {}}};
 
     std::map<cell_global_label_type, std::map<cell_global_label_type, double>> results;
     results[{0, "a"}][{2, "d"}] = 0.41817336;
@@ -642,7 +643,7 @@ TEST(network_value, uniform_distribution_reproducibility) {
 }
 
 TEST(network_value, normal_distribution) {
-    const std::vector<network_cell_group> pop = {{0, 500, {{"a"}, {"b"}}, {{"d"}}}};
+    const std::vector<network_cell_group> pop = {{0, 500, {{"a"}, {"b"}}, {{"d"}}, {}}};
 
     const double mean = 5.0;
     const double std_dev = 3.0;
@@ -670,12 +671,12 @@ TEST(network_value, normal_distribution) {
 }
 
 TEST(network_value, normal_distribution_reproducibility) {
-    const std::vector<network_cell_group> pop = {{0, 2, {{"a"}}, {}},
-        {2, 4, {{"a"}}, {{"d"}}},
-        {4, 5, {}, {{"d"}}},
-        {12, 13, {{"b"}}, {}},
-        {13, 14, {{"b"}}, {{"e"}}},
-        {14, 15, {}, {{"e"}}}};
+    const std::vector<network_cell_group> pop = {{0, 2, {{"a"}}, {}, {}},
+        {2, 4, {{"a"}}, {{"d"}}, {}},
+        {4, 5, {}, {{"d"}}, {}},
+        {12, 13, {{"b"}}, {}, {}},
+        {13, 14, {{"b"}}, {{"e"}}, {}},
+        {14, 15, {}, {{"e"}}, {}}};
 
     std::map<cell_global_label_type, std::map<cell_global_label_type, double>> results;
     results[{0, "a"}][{2, "d"}] = 0.08772826;
@@ -723,7 +724,7 @@ TEST(network_value, normal_distribution_reproducibility) {
 }
 
 TEST(network_value, truncated_normal_distribution) {
-    const std::vector<network_cell_group> pop = {{0, 500, {{"a"}, {"b"}}, {{"d"}}}};
+    const std::vector<network_cell_group> pop = {{0, 500, {{"a"}, {"b"}}, {{"d"}}, {}}};
 
     const double mean = 5.0;
     const double std_dev = 3.0;
@@ -752,12 +753,12 @@ TEST(network_value, truncated_normal_distribution) {
 }
 
 TEST(network_value, truncated_normal_distribution_reproducibility) {
-    const std::vector<network_cell_group> pop = {{0, 2, {{"a"}}, {}},
-        {2, 4, {{"a"}}, {{"d"}}},
-        {4, 5, {}, {{"d"}}},
-        {12, 13, {{"b"}}, {}},
-        {13, 14, {{"b"}}, {{"e"}}},
-        {14, 15, {}, {{"e"}}}};
+    const std::vector<network_cell_group> pop = {{0, 2, {{"a"}}, {}, {}},
+        {2, 4, {{"a"}}, {{"d"}}, {}},
+        {4, 5, {}, {{"d"}}, {}},
+        {12, 13, {{"b"}}, {}, {}},
+        {13, 14, {{"b"}}, {{"e"}}, {}},
+        {14, 15, {}, {{"e"}}, {}}};
 
     std::map<cell_global_label_type, std::map<cell_global_label_type, double>> results;
     results[{0, "a"}][{2, "d"}] = 6.75583032;
@@ -807,7 +808,7 @@ TEST(network_value, truncated_normal_distribution_reproducibility) {
 
 TEST(network_value, custom) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     for_each_pop_connection(
         pop, [&](const cell_global_label_type& src, const cell_global_label_type& dest) {
@@ -827,7 +828,7 @@ TEST(network_value, custom) {
 
 TEST(network_value, uniform) {
     const std::vector<network_cell_group> pop = {
-        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}}, {25, 42, {{"sc"}}, {}}};
+        {0, 20, {{"sa"}, {"sb"}}, {{"da"}, {"db"}}, {}}, {25, 42, {{"sc"}}, {}, {}}};
 
     const auto v1 = network_value::uniform(5.0);
     const network_value v2(5.0);
@@ -842,7 +843,7 @@ TEST(network_value, uniform) {
 TEST(spatial_network_value, conversion) {
     const network_location loc = {0.0, 0.0, 0.0};
     const std::vector<spatial_network_cell_group> pop = {
-        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(50, loc)}};
+        {0, {{"a"}}, {{"b"}}, {}, std::vector<network_location>(50, loc)}};
 
     const auto v1 = network_value::normal_distribution(42, 2.0, 2.0);
     const spatial_network_value v2(v1);
@@ -860,8 +861,16 @@ TEST(spatial_network_value, conversion) {
 TEST(spatial_network_value, custom) {
 
     const std::vector<spatial_network_cell_group> pop = {
-        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(10, network_location{1.0, 1.0, 1.0})},
-        {10, {{"c"}}, {{"d"}}, std::vector<network_location>(10, network_location{2.0, 2.0, 2.0})}};
+        {0,
+            {{"a"}},
+            {{"b"}},
+            {},
+            std::vector<network_location>(10, network_location{1.0, 1.0, 1.0})},
+        {10,
+            {{"c"}},
+            {{"d"}},
+            {},
+            std::vector<network_location>(10, network_location{2.0, 2.0, 2.0})}};
 
     for_each_pop_connection(pop,
         [&](const cell_global_label_type& src,
@@ -891,7 +900,7 @@ TEST(spatial_network_value, custom) {
 TEST(spatial_network_selection, conversion) {
     const network_location loc = {0.0, 0.0, 0.0};
     const std::vector<spatial_network_cell_group> pop = {
-        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(50, loc)}};
+        {0, {{"a"}}, {{"b"}}, {}, std::vector<network_location>(50, loc)}};
 
     const auto s1 = network_selection::inter_cell();
     const spatial_network_selection s2(s1);
@@ -909,8 +918,8 @@ TEST(spatial_network_selection, conversion) {
 TEST(spatial_network_selection, custom) {
 
     const std::vector<spatial_network_cell_group> pop = {
-        {0, {{"a"}}, {{"b"}}, std::vector<network_location>(10, network_location{1.0, 1.0, 1.0})},
-        {10, {{"c"}}, {{"d"}}, std::vector<network_location>(10, network_location{2.0, 2.0, 2.0})}};
+        {0, {{"a"}}, {{"b"}}, {}, std::vector<network_location>(10, network_location{1.0, 1.0, 1.0})},
+        {10, {{"c"}}, {{"d"}}, {}, std::vector<network_location>(10, network_location{2.0, 2.0, 2.0})}};
 
     for_each_pop_connection(pop,
         [&](const cell_global_label_type& src,
@@ -943,6 +952,7 @@ TEST(spatial_network_selection, within_distance) {
     const std::vector<spatial_network_cell_group> pop = {{0,
         {{"a"}},
         {{"b"}},
+        {},
         std::vector<network_location>({{1.0}, {2.0}, {3.0}, {4.0}, {5.0}, {6.0}, {7.0}})}};
 
     const double distance = 1.0;
@@ -965,6 +975,7 @@ TEST(spatial_cell_connection_network, simple) {
     const std::vector<spatial_network_cell_group> pop = {{0,
         {{"a"}},
         {{"b"}},
+        {},
         std::vector<network_location>({{1.0}, {2.0}, {3.0}, {4.0}, {5.0}, {6.0}, {7.0}})}};
 
     const double distance = 1.0;
@@ -985,7 +996,7 @@ TEST(spatial_cell_connection_network, distance_sampling) {
         locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
     }
 
-    const std::vector<spatial_network_cell_group> pop = {{0, {{"a"}}, {{"b"}}, locations}};
+    const std::vector<spatial_network_cell_group> pop = {{0, {{"a"}}, {{"b"}}, {}, locations}};
 
     const double distance = 1.2;
 
@@ -1013,7 +1024,7 @@ TEST(spatial_cell_connection_network, full_sampling) {
         locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
     }
 
-    const std::vector<spatial_network_cell_group> pop = {{0, {{"a"}}, {{"b"}}, locations}};
+    const std::vector<spatial_network_cell_group> pop = {{0, {{"a"}}, {{"b"}}, {}, locations}};
 
 
     auto size =
@@ -1025,7 +1036,9 @@ TEST(spatial_cell_connection_network, full_sampling) {
 
 TEST(spatial_gap_junction_network, simple) {
 
-    const std::vector<spatial_network_gj_group> pop = {{0,
+    const std::vector<spatial_network_cell_group> pop = {{0,
+        {},
+        {},
         {{"a"}},
         std::vector<network_location>({{1.0}, {2.0}, {3.0}, {4.0}, {5.0}, {6.0}, {7.0}})}};
 
@@ -1046,7 +1059,7 @@ TEST(spatial_gap_junction_network, distance_sampling) {
         locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
     }
 
-    const std::vector<spatial_network_gj_group> pop = {{0, {{"a"}}, locations}};
+    const std::vector<spatial_network_cell_group> pop = {{0, {}, {}, {{"a"}}, locations}};
 
     const double distance = 1.2;
 
@@ -1072,7 +1085,7 @@ TEST(spatial_gap_junction_network, full_sampling) {
         locations.push_back({distr(rand_gen), distr(rand_gen), distr(rand_gen)});
     }
 
-    const std::vector<spatial_network_gj_group> pop = {{0, {{"a"}}, locations}};
+    const std::vector<spatial_network_cell_group> pop = {{0, {}, {}, {{"a"}}, locations}};
 
     auto size = check_gap_junctions(network_value::uniform(3.0), network_selection::all(), pop);
 
