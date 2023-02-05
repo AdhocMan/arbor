@@ -101,8 +101,7 @@ class random_ring_recipe(arbor.recipe):
 
         # Select all cells by specifying the range [0, ncells).
         # Use different local labels for source and destination.
-        src_pop = [arbor.cell_global_range_label(0, ncells, "detector")]
-        dest_pop = [arbor.cell_global_range_label(0, ncells, "syn")]
+        group = arbor.network_cell_group(0, ncells, [("detector")], [("syn")], [])
 
         # Select only inter-cell connections, which are either randomly selected with a 8%
         # probability or part of a ring.
@@ -111,8 +110,8 @@ class random_ring_recipe(arbor.recipe):
             | arbor.network_selection.custom(ring_selection(ncells))
         )
 
-        self.connection_network = arbor.cell_connection_network(
-            w, d, selection, src_pop, dest_pop
+        self.connection_network = arbor.network_generator.cell_connections(
+            w, d, selection, [group]
         )
 
     # (6) The num_cells method that returns the total number of cells in the model
@@ -131,7 +130,7 @@ class random_ring_recipe(arbor.recipe):
 
     # (8) Generate network
     def connections_on(self, gid):
-        return self.connection_network.generate(gid)
+        return self.connection_network.connections_on(gid)
 
     # (9) Attach a generator to the first cell.
     def event_generators(self, gid):

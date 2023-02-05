@@ -75,8 +75,7 @@ public:
     {
         // Select all cells by specifying the range [0, num_cells_).
         // Use different local labels for source and destination.
-        arb::network_population src_pop = {{0, num_cells_, "detector"}};
-        arb::network_population dest_pop = {{0, num_cells_, "primary_syn"}};
+        arb::network_cell_group group(0, num_cells_, {{"detector"}}, {{"primary_syn"}}, {});
 
         // A custom selection, which selects any connection within a ring
         auto ring_selection = arb::network_selection::custom(
@@ -93,11 +92,10 @@ public:
 
         // Create the cell connection network, with a combination of a ring and random selection,
         // but allow connections between different cells
-        network_ = arb::cell_connection_network(weight,
+        network_ = arb::network_generator::cell_connections(weight,
             min_delay_,
             arb::network_selection::inter_cell() & (ring_selection | random_selection),
-            src_pop,
-            dest_pop);
+            {group});
 
         gprop_.default_parameters = arb::neuron_parameter_defaults;
     }
@@ -117,7 +115,7 @@ public:
     // Each cell has one incoming connection, from cell with gid-1.
     std::vector<arb::cell_connection> connections_on(cell_gid_type gid) const override {
         // Generate connections through network generation
-        return network_.generate(gid);
+        return network_.connections_on(gid);
     }
 
     // Return one event generator on gid 0. This generates a single event that will
@@ -147,7 +145,7 @@ private:
     double min_delay_;
     float event_weight_ = 0.05;
     arb::cable_cell_global_properties gprop_;
-    arb::cell_connection_network network_;
+    arb::network_generator network_;
 };
 
 int main(int argc, char** argv) {
