@@ -710,6 +710,9 @@ struct spatial_network_value::custom_impl: public spatial_value_impl {
     }
 };
 
+spatial_network_value::spatial_network_value(double value):
+    impl_(new value_conversion_impl(network_value(value))) {}
+
 spatial_network_value::spatial_network_value(network_value value):
     impl_(new value_conversion_impl(std::move(value))) {}
 

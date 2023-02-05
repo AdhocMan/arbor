@@ -302,6 +302,10 @@ private:
 
 class ARB_SYMBOL_VISIBLE spatial_network_value {
 public:
+    // Uniform value
+    spatial_network_value(double value);
+
+    // Conversion of non-spatial value
     spatial_network_value(network_value value);
 
     // Custom value using the provided function "func". Repeated calls with the same arguments
@@ -412,7 +416,6 @@ private:
     struct empty_impl;
     struct spatial_impl;
     struct non_spatial_impl;
-
 
     network_generator(std::shared_ptr<network_generator_impl> impl);
 
