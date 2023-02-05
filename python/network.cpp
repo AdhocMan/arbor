@@ -136,7 +136,8 @@ void register_network(py::module& m) {
         .def_static("custom",
             &arb::network_selection::custom,
             "func"_a,
-            "Custom selection using the provided function \"func\". "
+            "Custom selection using the provided function \"func\" with signature (src_label: "
+            "cell_global_label, dest_label: cell_global_label) -> bool. "
             "Repeated calls with the same arguments to \"func\" must yield the same result")
         .def_static("all", &arb::network_selection::all, "Select all")
         .def_static("none", &arb::network_selection::none, "Select none")
@@ -172,19 +173,15 @@ void register_network(py::module& m) {
             [](const arb::network_selection& self, const arb::spatial_network_selection& other) {
                 return self ^ other;
             })
-        .def(
-            "__call__",
-            [](const arb::network_selection& self,
-                const arb::cell_global_label_type& src,
-                const arb::cell_global_label_type& dest) { return self(src, dest); },
-            "src"_a,
-            "dest"_a);
+        .def("__call__", &arb::network_selection::operator(), "src"_a, "dest"_a);
 
     spatial_network_selection.def(py::init<arb::network_selection>())
         .def_static("custom",
             &arb::spatial_network_selection::custom,
             "func"_a,
-            "Custom selection using the provided function \"func\". "
+            "Custom selection using the provided function \"func\" with signature (src_label: "
+            "cell_global_label, src_location: list[float],  dest_label: cell_global_label, "
+            "dest_location: list[float], distance: float) -> bool. "
             "Repeated calls with the same arguments to \"func\" must yield the same result")
         .def_static("within_distance",
             &arb::spatial_network_selection::within_distance,
@@ -211,15 +208,8 @@ void register_network(py::module& m) {
             [](const arb::spatial_network_selection& self, const arb::network_selection& other) {
                 return self ^ other;
             })
-        .def(
-            "__call__",
-            [](const arb::spatial_network_selection& self,
-                const arb::cell_global_label_type& src,
-                const arb::network_location& src_location,
-                const arb::cell_global_label_type& dest,
-                const arb::network_location& dest_location) {
-                return self(src, src_location, dest, dest_location);
-            },
+        .def("__call__",
+            &arb::spatial_network_selection::operator(),
             "src"_a,
             "src_location"_a,
             "dest"_a,
@@ -231,6 +221,7 @@ void register_network(py::module& m) {
         m, "network_value", "Provides a floating point value for a given connection");
 
     network_value.def(py::init([](double value) { return arb::network_value(value); }), "value"_a)
+        .def(py::init<double>())
         .def_static("uniform_distribution",
             &arb::network_value::uniform_distribution,
             "seed"_a,
@@ -260,30 +251,47 @@ void register_network(py::module& m) {
         .def_static("custom",
             &arb::network_value::custom,
             "func"_a,
-            "Custom value using the provided function \"func\". Repeated calls with the same "
+            "Custom value using the provided function \"func\" with signature (src_label: "
+            "cell_global_label, dest_label: cell_global_label) -> float. Repeated calls with the "
+            "same "
             "arguments to \"func\" must yield the same result. For gap junction values, "
             "\"func\" must be symmetric (func(a,b) = func(b,a)).")
         .def_static("uniform",
             &arb::network_value::uniform,
             "value"_a,
             "Uniform value. Will always return the same value given at construction.")
-        .def(
-            "__call__",
-            [](const arb::network_value& self,
-                const arb::cell_global_label_type& src,
-                const arb::cell_global_label_type& dest) { return self(src, dest); },
-            "src"_a,
-            "dest"_a);
+        .def("__call__", &arb::network_value::operator(), "src"_a, "dest"_a);
+
+    py::implicitly_convertible<double, arb::network_value>();
+    py::implicitly_convertible<long, arb::network_value>();
 
     py::class_<arb::spatial_network_value> spatial_network_value(
         m, "spatial_network_value", "Provides a floating point value for a given connection");
 
-    spatial_network_value.def(py::init<arb::network_value>());
+    spatial_network_value.def(py::init<arb::network_value>())
+        .def(py::init<double>())
+        .def("__call__",
+            &arb::spatial_network_value::operator(),
+            "src"_a,
+            "src_loc"_a,
+            "dest"_a,
+            "dest_loc"_a)
+        .def_static("custom",
+            &arb::spatial_network_value::custom,
+            "func"_a,
+            "Custom value using the provided function \"func\" with signature (src_label: "
+            "cell_global_label, src_location: list[float],  dest_label: cell_global_label, "
+            "dest_location: list[float], distance: float) -> float. Repeated calls with the same "
+            "arguments to \"func\" must yield the same result. For gap junction values, "
+            "\"func\" must be symmetric (func(a,b) = func(b,a)).");
 
     py::implicitly_convertible<arb::network_value, arb::spatial_network_value>();
+    py::implicitly_convertible<double, arb::spatial_network_value>();
+    py::implicitly_convertible<long, arb::spatial_network_value>();
 
-    py::class_<arb::network_generator> network_generator(
-        m, "network_generator", "Generate reproducible list of cell connections and gap junctions.");
+    py::class_<arb::network_generator> network_generator(m,
+        "network_generator",
+        "Generate reproducible list of cell connections and gap junctions.");
 
     network_generator
         .def_static("cell_connections",
@@ -351,7 +359,15 @@ void register_network(py::module& m) {
             "gj_weight"_a,
             "gj_selection"_a,
             "pop"_a,
-            "Create a generator for cell connections and gap junctions.");
+            "Create a generator for cell connections and gap junctions.")
+        .def("connections_on",
+            &arb::network_generator::connections_on,
+            "gid"_a,
+            "Generate cell connections for given gid.")
+        .def("gap_junctions_on",
+            &arb::network_generator::gap_junctions_on,
+            "gid"_a,
+            "Generate gap junction connections for given gid.");
 }
 
 }  // namespace pyarb
