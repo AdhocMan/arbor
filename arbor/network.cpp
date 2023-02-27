@@ -30,6 +30,7 @@ namespace {
 // Different seed for each type to avoid unintentional correlation.
 enum class network_seed : unsigned {
     selection_bernoulli = 2058443,
+    spatial_selection_bernoulli = 839033,
     value_uniform = 48202,
     value_normal = 8405,
     value_truncated_normal = 380237
@@ -319,6 +320,46 @@ struct spatial_network_selection::selection_conversion_impl: public spatial_sele
         const network_location&,
         double) const override {
         return selection.select(src_gid, src_label, dest_gid, dest_label);
+    }
+};
+
+struct spatial_network_selection::linear_bernoulli_random_impl: public spatial_selection_impl {
+    unsigned seed = 0;
+    double distance_begin;
+    double p_begin;
+    double distance_end;
+    double p_end;
+
+    linear_bernoulli_random_impl(unsigned seed,
+        double distance_begin,
+        double p_begin,
+        double distance_end,
+        double p_end):
+        seed(seed),
+        distance_begin(distance_begin),
+        p_begin(p_begin),
+        distance_end(distance_end),
+        p_end(p_end) {}
+
+    std::optional<double> max_distance() const override { return distance_end; }
+
+    bool select(cell_gid_type src_gid,
+        const cell_local_label_type& src_label,
+        const network_location& src_location,
+        cell_gid_type dest_gid,
+        const cell_local_label_type& dest_label,
+        const network_location& dest_location,
+        double distance) const override {
+
+        if(distance < distance_begin || distance > distance_end) return false;
+
+        const double p =
+            (p_begin * (distance_end - distance) + p_end * (distance - distance_begin)) /
+            (distance_end - distance_begin);
+
+        return uniform_rand_from_key_pair({unsigned(network_seed::spatial_selection_bernoulli), seed},
+                   hash_global_tag(src_gid, src_label.tag),
+                   hash_global_tag(dest_gid, dest_label.tag)) < p;
     }
 };
 

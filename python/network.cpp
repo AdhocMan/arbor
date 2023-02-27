@@ -187,6 +187,16 @@ void register_network(py::module& m) {
             &arb::spatial_network_selection::within_distance,
             "d"_a,
             "Select only within givin distance.")
+        .def_static("linear_bernoulli_random",
+            &arb::spatial_network_selection::linear_bernoulli_random,
+            "seed"_a,
+            "distance_begin"_a,
+            "p_begin"_a,
+            "distance_end"_a,
+            "p_end"_a,
+            "Random bernoulli sampling with a linear interpolated probabilty based on distance. "
+            "Returns \"False\" for any distance outside of the interval [distance_begin, "
+            "distance_end].")
         .def("__and__",
             [](const arb::spatial_network_selection& self,
                 const arb::spatial_network_selection& other) { return self & other; })

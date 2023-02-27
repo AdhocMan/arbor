@@ -11,6 +11,8 @@
 
 namespace arb {
 
+// An immutable spatial data structure for storing and iterating over data in "DIM" dimensional
+// space. If DIM = 1 it's a binary tree, if DIM = 2 it's a quad tree and so on.
 template <typename T, std::size_t DIM>
 class spatial_tree {
 public:
@@ -23,10 +25,12 @@ public:
 
     spatial_tree(): size_(0), data_(leaf_data()) {}
 
+    // Create a tree of given maximum depth and target leaf size. If any leaf holds more than the
+    // target size, it is recursively split into up to 2^DIM nodes until reaching the maximum depth.
     spatial_tree(std::size_t max_depth, std::size_t leaf_size_target, leaf_data data):
         size_(data.size()),
         data_(std::move(data)) {
-        auto& leaf_d = std::get<leaf_data>(data_);
+        auto &leaf_d = std::get<leaf_data>(data_);
         if (leaf_d.empty()) return;
 
         min_.fill(std::numeric_limits<double>::max());
@@ -39,7 +43,8 @@ public:
             }
         }
 
-        for (std::size_t i = 0; i < DIM; ++i) { mid_[i] = (max_[i] - min_[i]) / 2.0 + min_[i]; }
+        value_type mid;
+        for (std::size_t i = 0; i < DIM; ++i) { mid[i] = (max_[i] - min_[i]) / 2.0 + min_[i]; }
 
         if (max_depth > 1 && leaf_d.size() > leaf_size_target) {
             constexpr auto divisor = math::pow<std::size_t, std::size_t>(2, DIM);
@@ -47,7 +52,7 @@ public:
             // The initial index of the sub node containing p
             auto sub_node_index = [&](const point_type &p) {
                 std::size_t index = 0;
-                for (std::size_t i = 0; i < DIM; ++i) { index += i * 2 * (p[i] >= mid_[i]); }
+                for (std::size_t i = 0; i < DIM; ++i) { index += i * 2 * (p[i] >= mid[i]); }
                 return index;
             };
 
@@ -60,9 +65,10 @@ public:
                 new_leaf_data[sub_node_index(p)].emplace_back(p, d);
             }
 
-            // move sorted data_ into new sub-nodes
-            for (auto &d: new_leaf_data) {
-                if (d.size()) new_nodes.emplace_back(max_depth - 1, leaf_size_target, std::move(d));
+            // move data into new sub-nodes if not empty
+            for (auto &l_d: new_leaf_data) {
+                if (l_d.size())
+                    new_nodes.emplace_back(max_depth - 1, leaf_size_target, std::move(l_d));
             }
 
             // replace current data_ with new sub-nodes
@@ -81,13 +87,11 @@ public:
         size_ = t.size_;
         min_ = t.min_;
         max_ = t.max_;
-        mid_ = t.mid_;
 
         t.data_ = leaf_data();
         t.size_ = 0;
         t.min_ = point_type();
         t.max_ = point_type();
-        t.mid_ = point_type();
 
         return *this;
     }
@@ -162,7 +166,7 @@ public:
 
 private:
     std::size_t size_;
-    point_type min_, max_, mid_;
+    point_type min_, max_;
     std::variant<node_data, leaf_data> data_;
 };
 

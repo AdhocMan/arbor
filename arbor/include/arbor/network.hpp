@@ -4,15 +4,15 @@
 #include <arbor/export.hpp>
 #include <arbor/recipe.hpp>
 
-#include <optional>
 #include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <stdexcept>
-#include <vector>
-#include <utility>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 namespace arb {
 
@@ -43,9 +43,7 @@ struct ARB_SYMBOL_VISIBLE spatial_network_cell_group {
         return locations.at(gid - gid_begin);
     }
 
-    inline network_location& location(cell_gid_type gid) {
-        return locations.at(gid - gid_begin);
-    }
+    inline network_location& location(cell_gid_type gid) { return locations.at(gid - gid_begin); }
 
     cell_gid_type gid_begin, gid_end;
     std::vector<cell_local_label_type> src_labels, dest_labels, gj_labels;
@@ -129,7 +127,6 @@ private:
     std::shared_ptr<selection_impl> impl_;
 };
 
-
 class ARB_SYMBOL_VISIBLE spatial_network_selection {
 public:
     spatial_network_selection(network_selection s);
@@ -143,7 +140,17 @@ public:
             const network_location&,
             double)> func);
 
+    // only select within given distance. This may enable more efficient sampling through an
+    // internal spatial data structure.
     static spatial_network_selection within_distance(double distance);
+
+    // random bernoulli sampling with a linear interpolated probabilty based on distance. Returns
+    // "false" for any distance outside of the interval [distance_begin, distance_end].
+    static spatial_network_selection linear_bernoulli_random(unsigned seed,
+        double distance_begin,
+        double p_begin,
+        double distance_end,
+        double p_end);
 
     // Returns true if a connection between src and dest is selected.
     bool operator()(const cell_global_label_type& src,
@@ -166,7 +173,8 @@ private:
             const network_location&,
             cell_gid_type,
             const cell_local_label_type&,
-            const network_location&, double distance) const = 0;
+            const network_location&,
+            double distance) const = 0;
 
         virtual std::optional<double> max_distance() const { return std::nullopt; }
 
@@ -179,6 +187,7 @@ private:
     struct xor_impl;
     struct custom_impl;
     struct within_distance_impl;
+    struct linear_bernoulli_random_impl;
 
     spatial_network_selection(std::shared_ptr<spatial_selection_impl> impl);
 
@@ -189,7 +198,8 @@ private:
         const network_location& src_location,
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label,
-        const network_location& dest_location, double distance) const {
+        const network_location& dest_location,
+        double distance) const {
         return impl_->select(
             src_gid, src_label, src_location, dest_gid, dest_label, dest_location, distance);
     }
@@ -348,14 +358,14 @@ private:
         const network_location& src_location,
         cell_gid_type dest_gid,
         const cell_local_label_type& dest_label,
-        const network_location& dest_location, double distance) const {
+        const network_location& dest_location,
+        double distance) const {
         return impl_->get(
             src_gid, src_label, src_location, dest_gid, dest_label, dest_location, distance);
     }
 
     std::shared_ptr<spatial_value_impl> impl_;
 };
-
 
 // Generate connections on demand
 class ARB_SYMBOL_VISIBLE network_generator {
@@ -404,7 +414,6 @@ public:
     }
 
 private:
-
     struct network_generator_impl {
         virtual std::vector<cell_connection> connections_on(cell_gid_type gid) const = 0;
 
